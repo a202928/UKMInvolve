@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cari Program | UKMInvolve</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* CSS yang anda berikan dikekalkan di sini */
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --surface: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #4b5563;
+            --text-tertiary: #9ca3af;
+            --border: #e5e7eb;
+            --radius: 12px;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        }
+
+        .search-section {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            margin-bottom: 32px;
+        }
+        
+        .search-header { margin-bottom: 24px; }
+        .search-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+        .search-subtitle { color: var(--text-secondary); font-size: 14px; }
+        .main-search { position: relative; margin-bottom: 20px; }
+        
+        .search-input {
+            width: 100%;
+            padding: 16px 24px 16px 56px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            font-size: 16px;
+            background: var(--surface);
+            transition: all 0.2s ease;
+        }
+
+        .search-icon { position: absolute; left: 24px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 18px; }
+        .filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 20px; }
+        .filter-group { display: flex; flex-direction: column; gap: 8px; }
+        .filter-label { font-weight: 600; color: var(--text-primary); font-size: 14px; display: flex; align-items: center; gap: 6px; }
+        .filter-select, .filter-input { padding: 12px 16px; border: 2px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--surface); }
+        .sort-options { display: flex; gap: 12px; align-items: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+        .sort-btn { padding: 8px 16px; background: var(--surface); border: 2px solid var(--border); border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; }
+        .sort-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .programs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+        
+        .program-card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .program-image-container { position: relative; width: 100%; height: 180px; }
+        .program-image { width: 100%; height: 100%; object-fit: cover; }
+        .program-badges { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+        .category-badge { padding: 6px 12px; background: rgba(255, 255, 255, 0.95); border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: white; }
+        .status-available { background: #10b981; }
+        .status-full { background: #ef4444; }
+        .program-content { padding: 20px; flex: 1; display: flex; flex-direction: column; }
+        .program-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+        .program-description { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }
+        .meta-item { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+        .meta-icon { color: var(--primary); }
+        .availability-bar { width: 100%; height: 6px; background: var(--border); border-radius: 3px; margin-top: 4px; }
+        .availability-fill { height: 100%; border-radius: 3px; }
+        .btn-register { background: var(--primary); color: white; padding: 10px; border-radius: 8px; text-align: center; text-decoration: none; font-weight: 600; }
+        .btn-register.disabled { background: var(--border); cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="app-layout">
+    <aside class="sidebar">
+        <div style="padding: 20px;"><strong>UKMInvolve</strong></div>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar"></header>
+
+        <section class="content" style="padding: 24px;">
+            <div class="welcome-section">
+                <h1 class="page-title">Cari Program</h1>
+                <p class="page-subtitle">Temui program menarik yang sesuai dengan minat anda</p>
+            </div>
+
+            <div class="quick-filters" style="display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap;">
+                <button class="sort-btn"><i class="fas fa-trophy"></i> Kepimpinan</button>
+                <button class="sort-btn"><i class="fas fa-code"></i> Teknologi</button>
+                <button class="sort-btn"><i class="fas fa-heart"></i> Komuniti</button>
+                <button class="sort-btn"><i class="fas fa-briefcase"></i> Kerjaya</button>
+            </div>
+
+            <div class="search-section">
+                <div class="main-search">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" class="search-input" placeholder="Cari program...">
+                </div>
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label class="filter-label">Kategori</label>
+                        <select class="filter-select">
+                            <option>Semua Kategori</option>
+                            <option>Kepimpinan</option>
+                            <option>Teknologi</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Lokasi</label>
+                        <select class="filter-select">
+                            <option>Semua Lokasi</option>
+                            <option>Dewan Tun Canselor</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="programs-grid">
+                <div class="program-card">
+                    <div class="program-image-container">
+                        <img src="images/program1.jpg" alt="Workshop Kepimpinan" class="program-image">
+                        <div class="program-badges">
+                            <span class="category-badge">Kepimpinan</span>
+                            <span class="status-badge status-available">Ada Slot</span>
+                        </div>
+                    </div>
+                    <div class="program-content">
+                        <h3 class="program-title">Workshop Kepimpinan Mahasiswa</h3>
+                        <p class="program-description">Program latihan kepimpinan intensif untuk mahasiswa</p>
+                        <div class="program-meta">
+                            <div class="meta-item"><i class="fas fa-calendar meta-icon"></i> 25 Jan 2026 • 9:00 AM</div>
+                            <div class="meta-item"><i class="fas fa-map-marker-alt meta-icon"></i> Dewan Tun Canselor</div>
+                            <div class="meta-item"><i class="fas fa-users meta-icon"></i> 45 / 100 peserta</div>
+                        </div>
+                        <div style="margin-top: auto;">
+                            <div class="availability-bar">
+                                <div class="availability-fill" style="width: 55%; background: #10b981;"></div>
+                            </div>
+                            <div style="display:flex; gap:10px; margin-top:15px;">
+                                <a href="#" class="btn-register" style="flex:1;">Daftar</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="program-card">
+                    <div class="program-image-container">
+                        <img src="images/program1.jpg" alt="Bengkel Penulisan" class="program-image">
+                        <div class="program-badges">
+                            <span class="category-badge">Akademik</span>
+                            <span class="status-badge status-full">Penuh</span>
+                        </div>
+                    </div>
+                    <div class="program-content">
+                        <h3 class="program-title">Bengkel Penulisan Ilmiah</h3>
+                        <p class="program-description">Bengkel teknik penulisan akademik yang efektif</p>
+                        <div class="program-meta">
+                            <div class="meta-item"><i class="fas fa-calendar meta-icon"></i> 30 Jan 2026 • 2:00 PM</div>
+                            <div class="meta-item"><i class="fas fa-map-marker-alt meta-icon"></i> Perpustakaan</div>
+                            <div class="meta-item"><i class="fas fa-users meta-icon"></i> 25 / 30 peserta</div>
+                        </div>
+                        <div style="margin-top: auto;">
+                            <div class="availability-bar">
+                                <div class="availability-fill" style="width: 16%; background: #ef4444;"></div>
+                            </div>
+                            <div style="display:flex; gap:10px; margin-top:15px;">
+                                <button class="btn-register disabled" style="flex:1;">Penuh</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script>
+    function viewProgramDetails(id) {
+        alert("Butiran Program " + id);
+    }
+</script>
+
+</body>
+</html>

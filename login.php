@@ -1,15 +1,21 @@
+<?php
+session_start();
+$error = $_SESSION['error'] ?? '';
+unset($_SESSION['error']);
+?>
 <!DOCTYPE html>
 <html lang="ms">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log Masuk | UKMInvolve</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+<!-- BLURRED BACKGROUND -->
 <div class="bg-blur"></div>
 
+<!-- LOGIN CONTENT -->
 <div class="login-container">
     <div class="login-card">
 
@@ -33,13 +39,15 @@
                 <input type="password" name="password" id="password" placeholder="Masukkan kata laluan" required>
             </div>
 
-            <div id="error-message" class="error-box" style="display: none;"></div>
+            <?php if ($error): ?>
+                <div class="error-box"><?= $error ?></div>
+            <?php endif; ?>
 
             <button type="submit" class="btn-primary">Log Masuk</button>
         </form>
 
         <div class="login-footer">
-            <a href="register.html">Daftar Akaun Baharu</a><br>
+            <a href="register.php">Daftar Akaun Baharu</a><br>
             <a href="#">Lupa Kata Laluan?</a>
         </div>
 
