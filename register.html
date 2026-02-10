@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daftar Akaun | UKMInvolve</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="bg-blur"></div>
+
+<div class="login-container">
+    <div class="login-card">
+        
+        <div class="login-header">
+            <img src="ukm.jpg" alt="Logo UKM" class="logo">
+            <h1>Daftar Akaun Baharu</h1>
+            <p>
+                UKMInvolve<br>
+                <span>Sistem Penglibatan Pelajar</span>
+            </p>
+        </div>
+
+        <form action="process_register.php" method="POST">
+            <div class="form-group">
+                <label for="nama">Nama Penuh</label>
+                <input type="text" name="nama" id="nama"
+                       placeholder="Muhammad Ali bin Abdullah" required>
+            </div>
+
+            <div class="form-group">
+                <label for="emel">Emel UKM</label>
+                <input type="email" name="emel" id="emel"
+                       placeholder="nama@siswa.ukm.edu.my" required>
+            </div>
+
+            <div class="form-group">
+                <label for="matrik">Nombor Matrik</label>
+                <input type="text" name="matrik" id="matrik"
+                       placeholder="A123456" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Kata Laluan</label>
+                <input type="password" name="password" id="password"
+                       placeholder="Minimum 6 aksara" required>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">Sahkan Kata Laluan</label>
+                <input type="password" name="confirm_password" id="confirm_password"
+                       placeholder="Masukkan semula kata laluan" required>
+            </div>
+
+            <div id="error-message" class="error-box" style="display: none;"></div>
+
+            <button type="submit" class="btn-primary">Daftar Akaun</button>
+        </form>
+
+        <div class="login-footer">
+            <a href="login.html">Sudah ada akaun? Log Masuk</a>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
