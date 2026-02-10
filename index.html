@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <title>UKMInvolve | Universiti Kebangsaan Malaysia</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Tailwind Config -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ukmBlue: '#003366',
+            ukmOrange: '#FF6600'
+          }
+        }
+      }
+    }
+  </script>
+</head>
+
+<body class="bg-gray-50 text-gray-800">
+
+<!-- NAVBAR -->
+<header class="bg-ukmBlue sticky top-0 z-50 shadow">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-4">
+      <img src="UKM.png" alt="UKM Logo" class="w-12">
+      <h1 class="text-white text-xl font-bold tracking-wide">UKMInvolve</h1>
+    </div>
+
+    <nav class="hidden md:flex items-center gap-8 text-white font-medium">
+      <a href="#" class="hover:text-ukmOrange transition">Utama</a>
+      <a href="#about" class="hover:text-ukmOrange transition">Tentang</a>
+      <a href="#features" class="hover:text-ukmOrange transition">Ciri Sistem</a>
+      <a href="login.php" class="bg-ukmOrange px-5 py-2 rounded-lg font-semibold hover:bg-orange-600 transition">
+        Log Masuk
+      </a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="relative text-white">
+
+  <!-- Background Image -->
+  <div class="absolute inset-0">
+    <img src="ukm_background2.jpeg" class="w-full h-full object-cover">
+    <div class="absolute inset-0 bg-black/50"></div>
+  </div>
+
+  <div class="relative z-10 max-w-6xl mx-auto px-6 py-32 text-center">
+    <span class="inline-block mb-6 bg-white/20 backdrop-blur px-5 py-2 rounded-full text-sm font-semibold tracking-wide">
+      Portal Rasmi Penglibatan Pelajar UKM
+    </span>
+
+    <h2 class="text-4xl md:text-6xl font-extrabold leading-tight mb-6">
+      SISTEM PENGURUSAN PENYERTAAN<br>DAN HEBAHAN PROGRAM 
+    </h2>
+
+    <p class="text-blue-100 text-lg md:text-xl max-w-3xl mx-auto mb-10">
+      Platform digital bersepadu untuk mencari, mendaftar dan mengurus program
+      pelajar Universiti Kebangsaan Malaysia secara sistematik dan berpusat.
+    </p>
+
+    <div class="flex flex-col sm:flex-row justify-center gap-4">
+      <a href="login.php"
+         class="bg-ukmOrange text-white px-8 py-4 rounded-lg text-lg font-semibold shadow-lg hover:bg-orange-600 transition">
+        Mula Sekarang
+      </a>
+      <a href="#about"
+         class="border-2 border-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-white/10 transition">
+        Ketahui Lebih Lanjut
+      </a>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- ABOUT -->
+<section id="about" class="py-24 bg-white">
+  <div class="max-w-6xl mx-auto px-6 text-center">
+    <h3 class="text-3xl md:text-4xl font-bold text-ukmBlue mb-6">
+      Tentang UKMInvolve
+    </h3>
+
+    <p class="text-gray-600 text-lg max-w-4xl mx-auto leading-relaxed">
+      UKMInvolve merupakan sistem digital rasmi yang dibangunkan bagi menyokong
+      aspirasi Universiti Kebangsaan Malaysia dalam memperkasa penglibatan pelajar
+      melalui pengurusan aktiviti bukan akademik yang lebih cekap, telus dan berimpak.
+    </p>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="py-24 bg-gray-50">
+  <div class="max-w-7xl mx-auto px-6">
+
+    <div class="text-center mb-16">
+      <h3 class="text-3xl md:text-4xl font-bold text-ukmBlue mb-4">
+        Ciri-Ciri Utama Sistem
+      </h3>
+      <p class="text-gray-600 text-lg">
+        Direka khas untuk keperluan pelajar dan penganjur program UKM
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+
+      <div class="bg-white p-10 rounded-2xl shadow hover:shadow-xl transition">
+        <div class="w-16 h-16 bg-ukmBlue text-white flex items-center justify-center rounded-full text-3xl mb-6">
+          📢
+        </div>
+        <h4 class="text-xl font-bold text-ukmBlue mb-3">
+          Hebahan Program Berpusat
+        </h4>
+        <p class="text-gray-600 leading-relaxed">
+          Semua aktiviti dan program pelajar dipaparkan dalam satu platform rasmi
+          untuk rujukan yang lebih sistematik.
+        </p>
+      </div>
+
+      <div class="bg-white p-10 rounded-2xl shadow hover:shadow-xl transition">
+        <div class="w-16 h-16 bg-ukmOrange text-white flex items-center justify-center rounded-full text-3xl mb-6">
+          📝
+        </div>
+        <h4 class="text-xl font-bold text-ukmBlue mb-3">
+          Pendaftaran Dalam Talian
+        </h4>
+        <p class="text-gray-600 leading-relaxed">
+          Proses pendaftaran program yang pantas, mesra pengguna dan boleh diakses
+          pada bila-bila masa.
+        </p>
+      </div>
+
+      <div class="bg-white p-10 rounded-2xl shadow hover:shadow-xl transition">
+        <div class="w-16 h-16 bg-green-600 text-white flex items-center justify-center rounded-full text-3xl mb-6">
+          📊
+        </div>
+        <h4 class="text-xl font-bold text-ukmBlue mb-3">
+          Pemantauan Penyertaan
+        </h4>
+        <p class="text-gray-600 leading-relaxed">
+          Penganjur dapat menilai kadar penyertaan dan penglibatan pelajar
+          secara lebih efektif.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="bg-ukmBlue text-white py-10">
+  <div class="max-w-7xl mx-auto px-6 text-center">
+    <p class="text-sm tracking-wide">
+      © 2026 UKMInvolve · Universiti Kebangsaan Malaysia
+    </p>
+    <p class="text-xs text-blue-200 mt-2">
+      Sistem Rasmi Pengurusan Penglibatan Pelajar UKM
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
