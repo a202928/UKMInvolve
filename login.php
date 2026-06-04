@@ -1,7 +1,19 @@
 <?php
 session_start();
+require_once __DIR__ . '/config/database.php';
+
+if (!empty($_SESSION['user_id'])) {
+    require_once __DIR__ . '/lib/bootstrap.php';
+    header('Location: ' . dashboardForRole($_SESSION['role'] ?? 'pelajar'));
+    exit();
+}
+
 $error = $_SESSION['error'] ?? '';
 unset($_SESSION['error']);
+
+$envStatus = Database::checkEnv();
+$dbReady = $envStatus['is_ready'];
+$configHint = Database::getSetupMessage();
 ?>
 <!DOCTYPE html>
 <html lang="ms">
@@ -30,17 +42,23 @@ unset($_SESSION['error']);
 
         <form action="process_login.php" method="POST">
             <div class="form-group">
-                <label for="email">Emel</label>
-                <input type="email" name="email" id="email" placeholder="nama@siswa.ukm.edu.my" required>
+                <label for="emel">Emel</label>
+                <input type="email" name="emel" id="emel" placeholder="nama@siswa.ukm.edu.my" required>
             </div>
 
             <div class="form-group">
-                <label for="password">Kata Laluan</label>
-                <input type="password" name="password" id="password" placeholder="Masukkan kata laluan" required>
+                <label for="kata_laluan">Kata Laluan</label>
+                <input type="password" name="kata_laluan" id="kata_laluan" placeholder="Masukkan kata laluan" required>
             </div>
 
             <?php if ($error): ?>
-                <div class="error-box"><?= $error ?></div>
+                <div class="error-box"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+
+            <?php if ($configHint && !$envStatus['is_ready']): ?>
+                <div class="error-box" style="background:#fff7ed;color:#9a3412;border-color:#fdba74;">
+                    <?= htmlspecialchars($configHint) ?>
+                </div>
             <?php endif; ?>
 
             <button type="submit" class="btn-primary">Log Masuk</button>

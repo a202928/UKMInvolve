@@ -1,487 +1,206 @@
 <?php
 session_start();
-$_SESSION['role'] = 'pelajar';
+require_once __DIR__ . '/lib/bootstrap.php';
+requireRole('pelajar');
 $activePage = 'recommended';
 
-// In a real app, you would fetch this from database
-$userInterests = ['kepimpinan', 'teknologi', 'komuniti', 'akademik'];
+$interestList = [];
+if (db()->isConfigured()) {
+    foreach (categories()->listAll() as $cat) {
+        $interestList[$cat['slug']] = [$cat['nama'], $cat['icon'] ?? 'fa-layer-group'];
+    }
+}
+
+if (empty($interestList)) {
+    $interestList = [
+        'kepimpinan' => ['Kepimpinan', 'fa-trophy'],
+        'teknologi' => ['Teknologi', 'fa-code'],
+        'komuniti' => ['Khidmat Komuniti', 'fa-heart'],
+    ];
+}
+
+$defaultInterests = array_slice(array_keys($interestList), 0, 3);
+$selectedInterests = $_POST['interests'] ?? $defaultInterests;
+
+$programs = [];
+if (db()->isConfigured()) {
+    foreach (programs()->listWithCategory() as $row) {
+        $programs[] = programs()->toRecommendedRow($row);
+    }
+}
+
+$recommendedPrograms = array_filter($programs, function ($program) use ($selectedInterests) {
+    return in_array($program['category'], $selectedInterests, true);
+});
+
+$studentInitial = strtoupper(substr($_SESSION['nama'] ?? 'P', 0, 1));
 ?>
 
 <!DOCTYPE html>
 <html lang="ms">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recommended For You | UKMInvolve</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* Filter Section */
-        .filter-section {
-            display: flex;
-            gap: 16px;
-            margin: 24px 0;
-            flex-wrap: wrap;
-        }
-        
-        .filter-tag {
-            padding: 8px 16px;
-            background: var(--surface);
-            border: 2px solid var(--border);
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .filter-tag:hover {
-            border-color: var(--primary);
-            transform: translateY(-1px);
-        }
-        
-        .filter-tag.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
-        
-        .filter-tag.active .tag-count {
-            background: rgba(255, 255, 255, 0.3);
-        }
-        
-        .tag-count {
-            background: var(--background);
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        /* Program Cards */
-        .match-badge {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            background: linear-gradient(135deg, #10b981, #34d399);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            z-index: 1;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        
-        .interest-match {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            background: rgba(37, 99, 235, 0.1);
-            color: var(--primary);
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-            margin-right: 6px;
-            margin-bottom: 6px;
-        }
-        
-        .interests-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin: 12px 0;
-        }
-        
-        .program-image-container {
-            position: relative;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            background: var(--surface);
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-        }
-        
-        .empty-state-icon {
-            font-size: 48px;
-            color: var(--text-tertiary);
-            margin-bottom: 16px;
-        }
-        
-        .empty-state h3 {
-            font-size: 20px;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-        
-        .empty-state p {
-            color: var(--text-secondary);
-            max-width: 400px;
-            margin: 0 auto 20px;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>For You | UKMInvolve</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--page:#f8fbff;--primary:#5b8def;--dark:#2563eb;--border:#dbeafe;--muted:#6b7280;--text:#111827}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fbff;color:var(--text);height:100vh;overflow:hidden}
+a{text-decoration:none;color:inherit}
+.dashboard-wrapper{height:100vh;display:grid;grid-template-columns:240px 1fr;background:var(--page)}
+.sidebar{height:100vh;background:#fff;border-right:1px solid var(--border);padding:28px 20px;display:flex;flex-direction:column;justify-content:space-between}
+.sidebar-header{display:flex;align-items:center;gap:12px;margin-bottom:30px}
+.sidebar-logo-wrap{width:38px;height:38px;border-radius:14px;background:#eaf4ff;display:flex;align-items:center;justify-content:center}
+.sidebar-logo{width:28px;height:28px}
+.sidebar-title{font-size:19px;font-weight:800}
+.sidebar-label{font-size:11px;color:#9ca3af;text-transform:uppercase;margin-bottom:10px;padding-left:8px}
+.sidebar-nav{display:flex;flex-direction:column;gap:8px}
+.sidebar-link{padding:11px 12px;border-radius:14px;display:flex;gap:12px;align-items:center;color:#374151;font-weight:500}
+.sidebar-link.active,.sidebar-link:hover{background:#eff6ff;color:#2563eb;font-weight:700}
+.logout-link{color:#f97316}
+.user-profile{display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid var(--border);border-radius:16px;padding:12px}
+.user-avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
+.main-section{height:100vh;overflow-y:auto;padding:28px}
+.page-header{margin-bottom:22px}
+.page-header h1{font-size:30px}
+.page-header p{color:var(--muted);font-size:14px;margin-top:4px}
+.card{background:#fff;border:1px solid var(--border);border-radius:26px;padding:22px;box-shadow:0 8px 20px rgba(37,99,235,.06);margin-bottom:22px}
+.card h2{font-size:22px;margin-bottom:8px}
+.card p{color:var(--muted);font-size:14px}
+.interests-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-top:18px}
+.interest-card{border:1px solid var(--border);border-radius:18px;padding:15px;background:#fff;cursor:pointer;display:flex;align-items:center;gap:12px}
+.interest-card input{display:none}
+.interest-card.selected{background:#eff6ff;border-color:var(--primary);color:var(--dark);font-weight:700}
+.interest-icon{width:42px;height:42px;border-radius:14px;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center}
+.save-row{display:flex;justify-content:space-between;align-items:center;margin-top:18px}
+.btn-save{border:none;background:var(--primary);color:#fff;padding:11px 18px;border-radius:999px;font-weight:800;cursor:pointer}
+.selected-text{font-size:13px;color:var(--muted)}
+.program-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px}
+.program-card{background:#fff;border:1px solid var(--border);border-radius:24px;overflow:hidden;box-shadow:0 8px 20px rgba(37,99,235,.06)}
+.program-image{height:160px;background:#dbeafe;position:relative}
+.program-image img{width:100%;height:100%;object-fit:cover}
+.match-badge{position:absolute;top:12px;right:12px;background:#10b981;color:#fff;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:800}
+.program-content{padding:18px}
+.program-content h3{font-size:18px;margin-bottom:8px}
+.program-meta{display:flex;flex-direction:column;gap:7px;color:var(--muted);font-size:13px;margin:12px 0}
+.program-meta i{color:var(--dark);width:18px}
+.tag{display:inline-block;background:#eff6ff;color:#2563eb;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:800;margin-bottom:10px}
+.btn-view{width:100%;border:none;background:var(--primary);color:white;padding:10px;border-radius:999px;font-weight:800;cursor:pointer}
+.empty{background:white;border:1px solid var(--border);border-radius:24px;padding:40px;text-align:center;color:var(--muted)}
+</style>
 </head>
+
 <body>
+<div class="dashboard-wrapper">
 
-<div class="app-layout">
-    <!-- SIDEBAR -->
-    <?php include 'sidebar.php'; ?>
+<aside class="sidebar">
+    <div>
+        <div class="sidebar-header">
+            <div class="sidebar-logo-wrap"><img src="UKM.png" class="sidebar-logo"></div>
+            <h3 class="sidebar-title">UKMInvolve</h3>
+        </div>
 
-    <!-- MAIN CONTENT -->
-    <main class="main-content">
-       <!-- TOP BAR -->
-<header class="topbar"></header>
+        <p class="sidebar-label">Menu</p>
+        <nav class="sidebar-nav">
+            <a href="dashboard_pelajar.php" class="sidebar-link"><i class="fas fa-house"></i> Home</a>
+            <a href="search.php" class="sidebar-link"><i class="fas fa-magnifying-glass"></i> Search</a>
+            <a href="recommended.php" class="sidebar-link active"><i class="fas fa-lightbulb"></i> For You</a>
+            <a href="rekod-penyertaan.php" class="sidebar-link"><i class="fas fa-clock-rotate-left"></i> History</a>
+            <a href="logout.php" class="sidebar-link logout-link"><i class="fas fa-right-from-bracket"></i> Logout</a>
+        </nav>
+    </div>
 
+    <div class="user-profile">
+        <div class="user-avatar"><?= htmlspecialchars($studentInitial) ?></div>
+        <div>
+            <h4><?= htmlspecialchars($_SESSION['nama'] ?? 'Pelajar') ?></h4>
+            <p><?= htmlspecialchars($_SESSION['emel'] ?? '') ?></p>
+        </div>
+    </div>
+</aside>
 
-        <!-- PAGE CONTENT -->
-        <section class="content">
-            <!-- Header Section -->
-            <div class="welcome-section">
-                <h1 class="page-title">Recommended For You</h1>
-                <p class="page-subtitle">Program yang disyorkan berdasarkan minat anda</p>
-            </div>
+<main class="main-section">
 
-            <!-- User Interests Summary -->
-            <div class="card">
-                <h3 style="font-size: 18px; margin-bottom: 16px; color: var(--text-primary);">
-                    📊 Minat Anda
-                </h3>
-                <div class="interests-container">
-                    <?php
-                    $interestLabels = [
-                        'kepimpinan' => ['label' => 'Kepimpinan', 'icon' => 'fa-trophy', 'color' => '#f59e0b'],
-                        'teknologi' => ['label' => 'Teknologi & IT', 'icon' => 'fa-code', 'color' => '#3b82f6'],
-                        'komuniti' => ['label' => 'Khidmat Komuniti', 'icon' => 'fa-heart', 'color' => '#ef4444'],
-                        'akademik' => ['label' => 'Akademik', 'icon' => 'fa-graduation-cap', 'color' => '#6366f1'],
-                        'seni' => ['label' => 'Seni & Budaya', 'icon' => 'fa-palette', 'color' => '#8b5cf6'],
-                        'sukan' => ['label' => 'Sukan & Kesihatan', 'icon' => 'fa-dumbbell', 'color' => '#f97316'],
-                    ];
-                    
-                    foreach ($userInterests as $interest):
-                        if (isset($interestLabels[$interest])):
-                    ?>
-                        <div class="interest-match">
-                            <i class="fas <?= $interestLabels[$interest]['icon'] ?>" 
-                               style="color: <?= $interestLabels[$interest]['color'] ?>"></i>
-                            <?= $interestLabels[$interest]['label'] ?>
-                        </div>
-                    <?php 
-                        endif;
-                    endforeach; 
-                    ?>
-                </div>
-                <p style="font-size: 14px; color: var(--text-secondary); margin-top: 12px;">
-                    <i class="fas fa-lightbulb"></i> Algoritma kami mencadangkan program yang paling sesuai dengan minat anda
-                </p>
-            </div>
+    <div class="page-header">
+        <h1>For You</h1>
+        <p>Choose your interests first, then UKMInvolve will recommend suitable events for you.</p>
+    </div>
 
-            <!-- Filter Section -->
-            <div class="filter-section">
-                <button class="filter-tag active" onclick="filterPrograms('all')">
-                    Semua Program
-                    <span class="tag-count">8</span>
-                </button>
-                <button class="filter-tag" onclick="filterPrograms('high-match')">
-                    <i class="fas fa-fire"></i>
-                    Padanan Tinggi
-                    <span class="tag-count">4</span>
-                </button>
-                <button class="filter-tag" onclick="filterPrograms('kepimpinan')">
-                    <i class="fas fa-trophy"></i>
-                    Kepimpinan
-                    <span class="tag-count">3</span>
-                </button>
-                <button class="filter-tag" onclick="filterPrograms('teknologi')">
-                    <i class="fas fa-code"></i>
-                    Teknologi
-                    <span class="tag-count">2</span>
-                </button>
-                <button class="filter-tag" onclick="filterPrograms('komuniti')">
-                    <i class="fas fa-heart"></i>
-                    Komuniti
-                    <span class="tag-count">3</span>
-                </button>
-            </div>
+    <form method="POST" class="card" id="interestForm">
+        <h2>Choose Your Interests</h2>
+        <p>Select one or more categories to personalize your recommendations.</p>
 
-            <!-- Program Grid -->
-            <div class="program-grid" id="programsContainer">
-                <?php
-                // Algorithm to show programs matching user interests
-                $allPrograms = [
-                    [
-                        'id' => 1,
-                        'title' => 'Workshop Kepimpinan Mahasiswa 2026',
-                        'date' => '15 Februari 2026',
-                        'location' => 'Dewan Tun Canselor',
-                        'image' => 'program1.jpg',
-                        'tags' => ['Kepimpinan', 'Badan Beruniform'],
-                        'interests' => ['kepimpinan'],
-                        'matchScore' => 95, // High match for kepimpinan
-                        'description' => 'Program latihan kepimpinan intensif untuk mahasiswa'
-                    ],
-                    [
-                        'id' => 2,
-                        'title' => 'Hackathon Inovasi Digital UKM',
-                        'date' => '22 Februari 2026',
-                        'location' => 'FTSM, UKM',
-                        'image' => 'program2.jpg',
-                        'tags' => ['Teknologi', 'Inovasi'],
-                        'interests' => ['teknologi', 'akademik'],
-                        'matchScore' => 88,
-                        'description' => 'Pertandingan pembangunan aplikasi dalam 48 jam'
-                    ],
-                    [
-                        'id' => 3,
-                        'title' => 'Program Sukarelawan Pendidikan Luar Bandar',
-                        'date' => '28 Februari 2026',
-                        'location' => 'Kampung Orang Asli, Pahang',
-                        'image' => 'program3.jpg',
-                        'tags' => ['Sukarelawan', 'Komuniti'],
-                        'interests' => ['komuniti'],
-                        'matchScore' => 85,
-                        'description' => 'Program khidmat masyarakat membantu pendidikan luar bandar'
-                    ],
-                    [
-                        'id' => 4,
-                        'title' => 'Forum Kepimpinan Belia Nasional',
-                        'date' => '5 Mac 2026',
-                        'location' => 'KL Convention Centre',
-                        'image' => 'program4.jpg',
-                        'tags' => ['Kepimpinan', 'Jaringan'],
-                        'interests' => ['kepimpinan', 'komuniti'],
-                        'matchScore' => 92,
-                        'description' => 'Forum kepimpinan belia peringkat kebangsaan'
-                    ],
-                    [
-                        'id' => 5,
-                        'title' => 'Bengkel AI & Machine Learning',
-                        'date' => '12 Mac 2026',
-                        'location' => 'Makmal Komputer FTSM',
-                        'image' => 'program1.jpg', // Reusing image
-                        'tags' => ['Teknologi', 'AI', 'Akademik'],
-                        'interests' => ['teknologi', 'akademik'],
-                        'matchScore' => 90,
-                        'description' => 'Bengkel praktikal pembangunan model AI'
-                    ],
-                    [
-                        'id' => 6,
-                        'title' => 'Kem Kepimpinan Pelajar',
-                        'date' => '19 Mac 2026',
-                        'location' => 'Kem Bina Semangat, Genting',
-                        'image' => 'program3.jpg', // Reusing image
-                        'tags' => ['Kepimpinan', 'Latihan', 'Sukan'],
-                        'interests' => ['kepimpinan', 'sukan'],
-                        'matchScore' => 87,
-                        'description' => 'Kem latihan kepimpinan dan pembinaan team'
-                    ],
-                    [
-                        'id' => 7,
-                        'title' => 'Program Mentor-Mentee Fakulti',
-                        'date' => '26 Mac 2026',
-                        'location' => 'Fakulti masing-masing',
-                        'image' => 'program2.jpg', // Reusing image
-                        'tags' => ['Akademik', 'Pembangunan Diri'],
-                        'interests' => ['akademik', 'kepimpinan'],
-                        'matchScore' => 82,
-                        'description' => 'Program bimbingan akademik dan kerjaya'
-                    ],
-                    [
-                        'id' => 8,
-                        'title' => 'Tech Conference 2026',
-                        'date' => '2 April 2026',
-                        'location' => 'MITEC, KL',
-                        'image' => 'program4.jpg', // Reusing image
-                        'tags' => ['Teknologi', 'Jaringan', 'Inovasi'],
-                        'interests' => ['teknologi'],
-                        'matchScore' => 94,
-                        'description' => 'Konferensi teknologi terbesar di Malaysia'
-                    ],
-                ];
+        <div class="interests-grid">
+            <?php foreach ($interestList as $id => $data): ?>
+                <?php $checked = in_array($id, $selectedInterests); ?>
+                <label class="interest-card <?= $checked ? 'selected' : '' ?>">
+                    <input type="checkbox" name="interests[]" value="<?= $id ?>" <?= $checked ? 'checked' : '' ?>>
+                    <div class="interest-icon"><i class="fas <?= $data[1] ?>"></i></div>
+                    <span><?= $data[0] ?></span>
+                </label>
+            <?php endforeach; ?>
+        </div>
 
-                // Filter programs based on user interests (algorithm)
-                $recommendedPrograms = [];
-                foreach ($allPrograms as $program) {
-                    $matchCount = 0;
-                    foreach ($program['interests'] as $programInterest) {
-                        if (in_array($programInterest, $userInterests)) {
-                            $matchCount++;
-                        }
-                    }
-                    
-                    // Calculate match percentage
-                    if ($matchCount > 0) {
-                        $program['matchCount'] = $matchCount;
-                        $program['totalInterests'] = count($program['interests']);
-                        $program['matchPercentage'] = ($matchCount / count($program['interests'])) * 100;
-                        $recommendedPrograms[] = $program;
-                    }
-                }
+        <div class="save-row">
+            <span class="selected-text">
+                <?= count($selectedInterests) ?> interest(s) selected
+            </span>
+            <button class="btn-save" type="submit">
+                <i class="fas fa-wand-magic-sparkles"></i> Generate Recommendations
+            </button>
+        </div>
+    </form>
 
-                // Sort by match score (descending)
-                usort($recommendedPrograms, function($a, $b) {
-                    return $b['matchScore'] <=> $a['matchScore'];
-                });
+    <div class="page-header">
+        <h1>Recommended Events</h1>
+        <p>Based on your selected interests.</p>
+    </div>
 
-                if (count($recommendedPrograms) > 0):
-                    foreach ($recommendedPrograms as $program):
-                        $matchLevel = $program['matchScore'] >= 90 ? 'high' : ($program['matchScore'] >= 80 ? 'medium' : 'low');
-                ?>
-                    <div class="program-card" data-match="<?= $matchLevel ?>" data-interests="<?= implode(',', $program['interests']) ?>">
-                        <div class="program-image-container">
-                            <img src="images/<?= $program['image'] ?>" alt="<?= $program['title'] ?>" class="program-image">
-                            <div class="match-badge">
-                                <i class="fas fa-bolt"></i>
-                                <?= $program['matchScore'] ?>% Match
-                            </div>
-                        </div>
-                        <div class="program-content">
-                            <!-- Tags -->
-                            <div style="margin-bottom: 8px;">
-                                <?php foreach ($program['tags'] as $tag): ?>
-                                    <span class="program-tag"><?= $tag ?></span>
-                                <?php endforeach; ?>
-                            </div>
-                            
-                            <h3><?= $program['title'] ?></h3>
-                            <p style="font-size: 14px; color: var(--text-secondary); margin: 8px 0 12px;">
-                                <?= $program['description'] ?>
-                            </p>
-                            
-                            <!-- Matching Interests -->
-                            <div class="interests-container">
-                                <span style="font-size: 12px; color: var(--text-secondary); margin-right: 8px;">
-                                    <i class="fas fa-check-circle" style="color: #10b981;"></i> Sesuai dengan:
-                                </span>
-                                <?php 
-                                foreach ($program['interests'] as $interest):
-                                    if (in_array($interest, $userInterests) && isset($interestLabels[$interest])):
-                                ?>
-                                    <div class="interest-match">
-                                        <i class="fas <?= $interestLabels[$interest]['icon'] ?>"></i>
-                                        <?= $interestLabels[$interest]['label'] ?>
-                                    </div>
-                                <?php 
-                                    endif;
-                                endforeach; 
-                                ?>
-                            </div>
-                            
-                            <div class="program-meta">
-                                <span class="meta-item">
-                                    <i class="fas fa-calendar"></i>
-                                    <?= $program['date'] ?>
-                                </span>
-                                <span class="meta-item">
-                                    <i class="fas fa-map-marker-alt"></i>
-                                    <?= $program['location'] ?>
-                                </span>
-                            </div>
-                            <button class="btn-view">Lihat Program</button>
+    <div class="program-grid">
+        <?php if (count($recommendedPrograms) > 0): ?>
+            <?php foreach ($recommendedPrograms as $program): ?>
+                <div class="program-card">
+                    <div class="program-image">
+                        <img src="images/<?= $program['image'] ?>" alt="<?= $program['title'] ?>">
+                        <div class="match-badge">
+                            <i class="fas fa-bolt"></i> Match
                         </div>
                     </div>
-                <?php 
-                    endforeach;
-                else: 
-                ?>
-                <!-- Empty State -->
-                <div class="empty-state">
-                    <div class="empty-state-icon">
-                        <i class="fas fa-search"></i>
-                    </div>
-                    <h3>Tiada Program Disyorkan</h3>
-                    <p>Sila kemaskini pilihan minat anda untuk mendapatkan cadangan program yang lebih relevan.</p>
-                    <a href="pilihan-minat.php" class="btn-primary" style="display: inline-block; width: auto; padding: 12px 24px;">
-                        <i class="fas fa-edit"></i> Kemaskini Minat
-                    </a>
-                </div>
-                <?php endif; ?>
-            </div>
 
-        </section>
-    </main>
+                    <div class="program-content">
+                        <span class="tag"><?= htmlspecialchars($interestList[$program['category']][0] ?? $program['category']) ?></span>
+                        <h3><?= $program['title'] ?></h3>
+
+                        <div class="program-meta">
+                            <div><i class="fas fa-calendar"></i> <?= $program['date'] ?></div>
+                            <div><i class="fas fa-location-dot"></i> <?= $program['location'] ?></div>
+                            <div><i class="fas fa-coins"></i> +<?= $program['points'] ?> Points</div>
+                        </div>
+
+                        <a href="daftar-program-form.php?id=<?= (int) $program['id'] ?>" class="btn-view" style="display:block;text-align:center;line-height:1.2;">View Event</a>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <div class="empty">
+                <h3>No recommendation yet</h3>
+                <p>Please choose at least one interest above.</p>
+            </div>
+        <?php endif; ?>
+    </div>
+
+</main>
 </div>
 
 <script>
-    // Filter programs by category
-    function filterPrograms(filter) {
-        const programs = document.querySelectorAll('.program-card');
-        const filterButtons = document.querySelectorAll('.filter-tag');
-        
-        // Update active filter button
-        filterButtons.forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.textContent.includes(filter.replace('-', ' ')) || 
-                (filter === 'all' && btn.textContent.includes('Semua'))) {
-                btn.classList.add('active');
-            }
-        });
-        
-        // Filter programs
-        let visibleCount = 0;
-        programs.forEach(program => {
-            if (filter === 'all') {
-                program.style.display = 'block';
-                visibleCount++;
-            } else if (filter === 'high-match') {
-                const matchScore = parseInt(program.querySelector('.match-badge').textContent);
-                if (matchScore >= 90) {
-                    program.style.display = 'block';
-                    visibleCount++;
-                } else {
-                    program.style.display = 'none';
-                }
-            } else {
-                const interests = program.getAttribute('data-interests');
-                if (interests.includes(filter)) {
-                    program.style.display = 'block';
-                    visibleCount++;
-                } else {
-                    program.style.display = 'none';
-                }
-            }
-        });
-        
-        // Show empty state if no programs
-        const container = document.getElementById('programsContainer');
-        if (visibleCount === 0 && filter !== 'all') {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">
-                        <i class="fas fa-filter"></i>
-                    </div>
-                    <h3>Tiada Program dalam Kategori Ini</h3>
-                    <p>Tidak ada program yang sesuai dengan filter "${filter}" pada masa ini.</p>
-                    <button onclick="filterPrograms('all')" class="btn-primary" style="display: inline-block; width: auto; padding: 12px 24px;">
-                        <i class="fas fa-redo"></i> Tunjukkan Semua Program
-                    </button>
-                </div>
-            `;
-        }
-    }
-    
-    // Add hover effects
-    document.addEventListener('DOMContentLoaded', function() {
-        const matchBadges = document.querySelectorAll('.match-badge');
-        matchBadges.forEach(badge => {
-            const score = parseInt(badge.textContent);
-            if (score >= 90) {
-                badge.style.background = 'linear-gradient(135deg, #10b981, #34d399)';
-            } else if (score >= 80) {
-                badge.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
-            } else {
-                badge.style.background = 'linear-gradient(135deg, #3b82f6, #60a5fa)';
-            }
-        });
+document.querySelectorAll('.interest-card').forEach(card => {
+    card.addEventListener('click', function () {
+        setTimeout(() => {
+            card.classList.toggle('selected', card.querySelector('input').checked);
+        }, 10);
     });
+});
 </script>
 
 </body>

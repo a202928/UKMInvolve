@@ -1,129 +1,112 @@
 <?php
 session_start();
-$_SESSION['role'] = 'pentadbir';
+require_once __DIR__ . '/lib/bootstrap.php';
+requireRole('pentadbir');
 $activePage = 'pemantauan-aktiviti';
 
-// Sample activities data
-$activities = [
-    [
-        'id' => 1,
-        'user' => 'penganjur@ukm.edu.my',
-        'action' => 'Menerbitkan program',
-        'details' => 'Workshop Kepimpinan Mahasiswa',
-        'timestamp' => '2026-01-18 14:30:22',
-        'type' => 'normal',
-        'ip' => '192.168.1.100',
-        'user_role' => 'Penganjur',
-    ],
-    [
-        'id' => 2,
-        'user' => 'pelajar@ukm.edu.my',
-        'action' => 'Mendaftar program',
-        'details' => 'Seminar Inovasi Digital',
-        'timestamp' => '2026-01-18 14:25:15',
-        'type' => 'normal',
-        'ip' => '192.168.1.101',
-        'user_role' => 'Pelajar',
-    ],
-    [
-        'id' => 3,
-        'user' => 'pentadbir@ukm.edu.my',
-        'action' => 'Menambah kategori',
-        'details' => 'Keusahawanan Digital',
-        'timestamp' => '2026-01-18 13:45:30',
-        'type' => 'admin',
-        'ip' => '192.168.1.102',
-        'user_role' => 'Pentadbir',
-    ],
-    [
-        'id' => 4,
-        'user' => 'unknown@external.com',
-        'action' => 'Percubaan log masuk gagal',
-        'details' => 'Kata laluan salah (5 percubaan)',
-        'timestamp' => '2026-01-18 12:30:10',
-        'type' => 'warning',
-        'ip' => '203.45.67.89',
-        'user_role' => 'Unknown',
-    ],
-    [
-        'id' => 5,
-        'user' => 'penganjur@ukm.edu.my',
-        'action' => 'Kemaskini program',
-        'details' => 'Program Sukarelawan Komuniti',
-        'timestamp' => '2026-01-18 11:15:45',
-        'type' => 'normal',
-        'ip' => '192.168.1.103',
-        'user_role' => 'Penganjur',
-    ],
-    [
-        'id' => 6,
-        'user' => 'pelajar@ukm.edu.my',
-        'action' => 'Memberi maklum balas',
-        'details' => 'Bengkel Penulisan Ilmiah (Rating: 4.5/5)',
-        'timestamp' => '2026-01-18 10:45:20',
-        'type' => 'normal',
-        'ip' => '192.168.1.104',
-        'user_role' => 'Pelajar',
-    ],
-    [
-        'id' => 7,
-        'user' => 'pentadbir@ukm.edu.my',
-        'action' => 'Mengemaskini peranan pengguna',
-        'details' => 'Pelajar A123456 -> Penganjur',
-        'timestamp' => '2026-01-18 09:30:55',
-        'type' => 'admin',
-        'ip' => '192.168.1.105',
-        'user_role' => 'Pentadbir',
-    ],
-    [
-        'id' => 8,
-        'user' => 'unknown@external.com',
-        'action' => 'Akses tidak dibenarkan',
-        'details' => 'Percubaan akses halaman pentadbir',
-        'timestamp' => '2026-01-18 08:15:30',
-        'type' => 'warning',
-        'ip' => '45.67.89.123',
-        'user_role' => 'Unknown',
-    ],
-];
+// Build activity log from real DB data
+$activities = [];
+
+if (db()->isConfigured()) {
+    // Recent registrations
+    $regs = db()->select('pendaftaran', '?select=id,nama,emel,no_matrik,tarikh_daftar,program(nama)&order=tarikh_daftar.desc&limit=30');
+    if ($regs['ok']) {
+        foreach ($regs['data'] as $row) {
+            $programName = is_array($row['program'] ?? null) ? ($row['program']['nama'] ?? 'Program') : 'Program';
+            $activities[] = [
+                'id'        => 'reg_' . $row['id'],
+                'user'      => $row['emel'],
+                'action'    => 'Mendaftar program',
+                'details'   => $programName,
+                'timestamp' => $row['tarikh_daftar'] ?? '',
+                'type'      => 'normal',
+                'ip'        => '-',
+                'user_role' => 'Pelajar',
+            ];
+        }
+    }
+
+    // Recent feedback
+    $feedback = db()->select('maklum_balas', '?select=id,created_at,rating,program(nama),users(emel)&order=created_at.desc&limit=20');
+    if ($feedback['ok']) {
+        foreach ($feedback['data'] as $row) {
+            $programName = is_array($row['program'] ?? null) ? ($row['program']['nama'] ?? 'Program') : 'Program';
+            $userEmail   = is_array($row['users'] ?? null) ? ($row['users']['emel'] ?? 'pelajar') : 'pelajar';
+            $activities[] = [
+                'id'        => 'fb_' . $row['id'],
+                'user'      => $userEmail,
+                'action'    => 'Memberi maklum balas',
+                'details'   => $programName . ' (Rating: ' . $row['rating'] . '/5)',
+                'timestamp' => $row['created_at'] ?? '',
+                'type'      => 'normal',
+                'ip'        => '-',
+                'user_role' => 'Pelajar',
+            ];
+        }
+    }
+
+    // Recent programs published
+    $progs = db()->select('program', '?select=id,nama,created_at,users(emel)&order=created_at.desc&limit=20');
+    if ($progs['ok']) {
+        foreach ($progs['data'] as $row) {
+            $userEmail = is_array($row['users'] ?? null) ? ($row['users']['emel'] ?? 'penganjur') : 'penganjur';
+            $activities[] = [
+                'id'        => 'prog_' . $row['id'],
+                'user'      => $userEmail,
+                'action'    => 'Menerbitkan program',
+                'details'   => $row['nama'],
+                'timestamp' => $row['created_at'] ?? '',
+                'type'      => 'normal',
+                'ip'        => '-',
+                'user_role' => 'Penganjur',
+            ];
+        }
+    }
+
+    // Recent new users
+    $newUsers = db()->select('users', '?select=id,nama,emel,peranan,created_at&order=created_at.desc&limit=10');
+    if ($newUsers['ok']) {
+        foreach ($newUsers['data'] as $row) {
+            $activities[] = [
+                'id'        => 'usr_' . $row['id'],
+                'user'      => $row['emel'],
+                'action'    => 'Akaun baharu didaftarkan',
+                'details'   => $row['nama'] . ' (' . ucfirst($row['peranan']) . ')',
+                'timestamp' => $row['created_at'] ?? '',
+                'type'      => $row['peranan'] === 'pentadbir' ? 'admin' : 'normal',
+                'ip'        => '-',
+                'user_role' => ucfirst($row['peranan']),
+            ];
+        }
+    }
+
+    // Sort all by timestamp descending
+    usort($activities, fn($a, $b) => strcmp($b['timestamp'], $a['timestamp']));
+}
 
 // Handle filters
 $searchQuery = $_GET['search'] ?? '';
-$filterType = $_GET['type'] ?? 'semua';
-$filterRole = $_GET['role'] ?? 'semua';
+$filterType  = $_GET['type'] ?? 'semua';
+$filterRole  = $_GET['role'] ?? 'semua';
 
-// Filter activities
 $filteredActivities = array_filter($activities, function($activity) use ($searchQuery, $filterType, $filterRole) {
-    // Search filter
-    if ($searchQuery && 
-        !(stripos($activity['user'], $searchQuery) !== false || 
-          stripos($activity['action'], $searchQuery) !== false || 
-          stripos($activity['details'], $searchQuery) !== false ||
-          stripos($activity['ip'], $searchQuery) !== false)) {
+    if ($searchQuery &&
+        !(stripos($activity['user'], $searchQuery) !== false ||
+          stripos($activity['action'], $searchQuery) !== false ||
+          stripos($activity['details'], $searchQuery) !== false)) {
         return false;
     }
-    
-    // Type filter
-    if ($filterType !== 'semua' && $activity['type'] !== $filterType) {
-        return false;
-    }
-    
-    // Role filter
-    if ($filterRole !== 'semua' && $activity['user_role'] !== $filterRole) {
-        return false;
-    }
-    
+    if ($filterType !== 'semua' && $activity['type'] !== $filterType) return false;
+    if ($filterRole !== 'semua' && $activity['user_role'] !== $filterRole) return false;
     return true;
 });
 
-// Statistics
 $totalActivities = count($activities);
-$normalCount = count(array_filter($activities, function($a) { return $a['type'] === 'normal'; }));
-$warningCount = count(array_filter($activities, function($a) { return $a['type'] === 'warning'; }));
-$adminCount = count(array_filter($activities, function($a) { return $a['type'] === 'admin'; }));
+$normalCount     = count(array_filter($activities, fn($a) => $a['type'] === 'normal'));
+$warningCount    = count(array_filter($activities, fn($a) => $a['type'] === 'warning'));
+$adminCount      = count(array_filter($activities, fn($a) => $a['type'] === 'admin'));
 
-// Unique user roles for filter
-$userRoles = array_unique(array_column($activities, 'user_role'));
+$userRoles = array_values(array_unique(array_column($activities, 'user_role')));
 sort($userRoles);
 ?>
 

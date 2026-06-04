@@ -3,546 +3,389 @@ session_start();
 $_SESSION['role'] = 'pelajar';
 $activePage = 'maklum-balas';
 
-// Check if program ID is provided
-$programId = $_GET['id'] ?? null;
-$programName = $_GET['program'] ?? 'Workshop Pemikiran Kritikal';
-$programDate = $_GET['date'] ?? '15 Januari 2026';
-$programLocation = $_GET['location'] ?? 'Bilik Seminar A';
-
-// Check if form is submitted
+$programName = $_GET['program'] ?? 'Gotong-Royong Kampus';
+$programDate = $_GET['date'] ?? '18 Januari 2026';
+$programLocation = $_GET['location'] ?? 'Kawasan Kolej';
 $submitted = isset($_POST['submit_feedback']);
+
+$menu = [
+    'dashboard_pelajar' => ['Home', 'fa-house'],
+    'search' => ['Search', 'fa-magnifying-glass'],
+    'recommended' => ['For You', 'fa-lightbulb'],
+    'rekod-penyertaan' => ['History', 'fa-clock-rotate-left'],
+    'logout' => ['Logout', 'fa-right-from-bracket']
+];
 ?>
 
 <!DOCTYPE html>
 <html lang="ms">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Maklum Balas Program | UKMInvolve</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* Feedback Form Styling */
-        .feedback-container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        
-        .form-section {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 32px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            margin-bottom: 24px;
-        }
-        
-        .form-header {
-            margin-bottom: 32px;
-        }
-        
-        .program-info {
-            background: var(--background);
-            padding: 16px;
-            border-radius: var(--radius);
-            margin-bottom: 24px;
-            border-left: 4px solid var(--primary);
-        }
-        
-        .question-group {
-            margin-bottom: 32px;
-            padding-bottom: 32px;
-            border-bottom: 1px solid var(--border);
-        }
-        
-        .question-group:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
-        }
-        
-        .question-label {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 16px;
-            display: block;
-        }
-        
-        /* Star Rating */
-        .star-rating {
-            display: flex;
-            gap: 12px;
-            margin: 16px 0;
-        }
-        
-        .star-btn {
-            background: none;
-            border: none;
-            font-size: 32px;
-            color: #ddd;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            padding: 4px;
-        }
-        
-        .star-btn:hover {
-            transform: scale(1.1);
-        }
-        
-        .star-btn.active {
-            color: #f59e0b;
-        }
-        
-        .star-btn.hovered {
-            color: #fbbf24;
-        }
-        
-        /* Radio Group */
-        .radio-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin: 16px 0;
-        }
-        
-        .radio-option {
-            display: flex;
-            align-items: center;
-            padding: 12px 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .radio-option:hover {
-            border-color: var(--primary);
-            background: rgba(37, 99, 235, 0.05);
-        }
-        
-        .radio-option.selected {
-            border-color: var(--primary);
-            background: rgba(37, 99, 235, 0.1);
-        }
-        
-        .radio-input {
-            margin-right: 12px;
-            width: 18px;
-            height: 18px;
-        }
-        
-        .radio-label {
-            flex: 1;
-            cursor: pointer;
-            font-weight: 500;
-        }
-        
-        /* Textarea */
-        .feedback-textarea {
-            width: 100%;
-            padding: 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-family: inherit;
-            font-size: 14px;
-            resize: vertical;
-            min-height: 120px;
-            margin: 16px 0;
-            transition: border-color 0.2s ease;
-        }
-        
-        .feedback-textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-        
-        /* Success Message */
-        .success-card {
-            text-align: center;
-            padding: 60px 40px;
-            background: var(--surface);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            max-width: 500px;
-            margin: 40px auto;
-        }
-        
-        .success-icon {
-            font-size: 64px;
-            color: #10b981;
-            margin-bottom: 20px;
-        }
-        
-        .success-title {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 12px;
-        }
-        
-        .success-message {
-            color: var(--text-secondary);
-            margin-bottom: 24px;
-            line-height: 1.6;
-        }
-        
-        /* Rating Labels */
-        .rating-labels {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 8px;
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-        
-        .required {
-            color: #ef4444;
-            margin-left: 4px;
-        }
-        
-        .error-message {
-            color: #ef4444;
-            font-size: 14px;
-            margin-top: 8px;
-            display: none;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Feedback | UKMInvolve</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+    --page:#f8fbff;--primary:#5b8def;--dark:#2563eb;--border:#dbeafe;
+    --muted:#6b7280;--text:#111827;--green:#10b981;--red:#ef4444;
+    --orange:#f97316;--yellow:#f59e0b;
+}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fbff;color:var(--text);height:100vh;overflow:hidden}
+a{text-decoration:none;color:inherit}
+button,input,textarea{font-family:inherit}
+
+.dashboard-wrapper{height:100vh;display:grid;grid-template-columns:240px 1fr;background:var(--page);overflow:hidden}
+
+/* SIDEBAR */
+.sidebar{height:100vh;background:#fff;border-right:1px solid var(--border);padding:28px 20px;display:flex;flex-direction:column;justify-content:space-between}
+.sidebar-header{display:flex;align-items:center;gap:12px;margin-bottom:30px}
+.sidebar-logo-wrap{width:38px;height:38px;border-radius:14px;background:#eaf4ff;display:flex;align-items:center;justify-content:center}
+.sidebar-logo{width:28px;height:28px;object-fit:contain}
+.sidebar-title{font-size:19px;font-weight:800}
+.sidebar-label{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;padding-left:8px}
+.sidebar-nav{display:flex;flex-direction:column;gap:8px}
+.sidebar-link{padding:11px 12px;border-radius:14px;display:flex;gap:12px;align-items:center;color:#374151;font-weight:500;transition:.25s}
+.sidebar-link i{width:18px;text-align:center}
+.sidebar-link.active,.sidebar-link:hover{background:#eff6ff;color:#2563eb;font-weight:700}
+.logout-link{color:#f97316}
+.logout-link:hover{background:#fff7ed;color:#f97316}
+.user-profile{display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid var(--border);border-radius:16px;padding:12px}
+.user-avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
+.user-profile h4{font-size:14px}
+.user-profile p{font-size:12px;color:var(--muted)}
+
+/* MAIN */
+.main-section{height:100vh;overflow-y:auto;padding:28px;background:var(--page)}
+.main-section::-webkit-scrollbar{width:8px}
+.main-section::-webkit-scrollbar-thumb{background:#bfdbfe;border-radius:999px}
+
+.feedback-container{max-width:860px;margin:0 auto}
+.page-header{margin-bottom:22px}
+.page-header h1{font-size:30px}
+.page-header p{color:var(--muted);font-size:14px;margin-top:4px}
+
+.program-card{
+    background:linear-gradient(135deg,#7bb6ff,#5b8def);
+    color:white;
+    border-radius:26px;
+    padding:24px;
+    margin-bottom:22px;
+    box-shadow:0 18px 38px rgba(91,141,239,.20);
+}
+.program-card h3{font-size:22px;margin-bottom:12px}
+.program-meta{display:flex;gap:18px;flex-wrap:wrap;font-size:14px;color:#eef6ff}
+.program-meta i{margin-right:6px}
+
+.form-card{
+    background:white;
+    border:1px solid var(--border);
+    border-radius:26px;
+    padding:26px;
+    box-shadow:0 8px 20px rgba(37,99,235,.06);
+}
+.question-group{padding:22px 0;border-bottom:1px solid var(--border)}
+.question-group:first-child{padding-top:0}
+.question-group:last-child{border-bottom:none}
+.question-label{font-size:16px;font-weight:800;margin-bottom:14px;display:block}
+.required{color:var(--red)}
+
+.star-rating{display:flex;gap:10px;margin:12px 0}
+.star-btn{background:none;border:none;font-size:30px;color:#d1d5db;cursor:pointer;transition:.2s}
+.star-btn:hover{transform:scale(1.12)}
+.star-btn.active i{color:var(--yellow)}
+.rating-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+
+.radio-group{display:grid;gap:10px;margin-top:12px}
+.radio-option{
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:13px 15px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    cursor:pointer;
+    transition:.25s;
+}
+.radio-option:hover,.radio-option.selected{background:#eff6ff;border-color:var(--primary);color:var(--dark);font-weight:700}
+.radio-input{width:17px;height:17px}
+
+.feedback-textarea{
+    width:100%;
+    min-height:130px;
+    resize:vertical;
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:16px;
+    font-size:14px;
+    outline:none;
+    margin-top:12px;
+}
+.feedback-textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(91,141,239,.12)}
+
+.error-message{display:none;color:var(--red);font-size:13px;margin-top:8px}
+.btn-submit{
+    width:100%;
+    border:none;
+    background:var(--primary);
+    color:white;
+    padding:15px;
+    border-radius:999px;
+    font-size:15px;
+    font-weight:800;
+    cursor:pointer;
+    margin-top:22px;
+}
+.btn-submit:hover{background:var(--dark)}
+
+.success-card{
+    background:white;
+    border:1px solid var(--border);
+    border-radius:26px;
+    padding:60px 35px;
+    text-align:center;
+    box-shadow:0 8px 20px rgba(37,99,235,.06);
+}
+.success-icon{font-size:64px;color:var(--green);margin-bottom:18px}
+.success-card h2{font-size:28px;margin-bottom:10px}
+.success-card p{color:var(--muted);line-height:1.6;margin-bottom:22px}
+.btn-back{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    background:var(--primary);
+    color:white;
+    padding:12px 24px;
+    border-radius:999px;
+    font-weight:800;
+}
+
+@media(max-width:900px){
+    body{overflow:auto}
+    .dashboard-wrapper{grid-template-columns:1fr;height:auto}
+    .sidebar{height:auto;position:relative;border-right:none;border-bottom:1px solid var(--border)}
+    .sidebar-nav{flex-direction:row;overflow-x:auto}
+    .sidebar-link{white-space:nowrap}
+    .user-profile{display:none}
+    .main-section{height:auto;overflow:visible}
+}
+</style>
 </head>
+
 <body>
+<div class="dashboard-wrapper">
 
-<div class="app-layout">
-    <!-- SIDEBAR -->
-    <?php include 'sidebar.php'; ?>
-
-    <!-- MAIN CONTENT -->
-    <main class="main-content">
-        <!-- TOP BAR -->
-<header class="topbar"></header>
-
-        <!-- PAGE CONTENT -->
-        <section class="content">
-            <?php if ($submitted): ?>
-            <!-- Success State -->
-            <div class="feedback-container">
-                <div class="success-card">
-                    <div class="success-icon">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <h2 class="success-title">Terima Kasih!</h2>
-                    <p class="success-message">
-                        Maklum balas anda telah berjaya dihantar dan akan digunakan untuk penambahbaikan program.
-                    </p>
-                    <a href="rekod-penyertaan.php" class="btn-primary" style="display: inline-block; width: auto; padding: 12px 32px;">
-                        <i class="fas fa-arrow-left"></i> Kembali ke Rekod Penyertaan
-                    </a>
-                </div>
+<aside class="sidebar">
+    <div>
+        <div class="sidebar-header">
+            <div class="sidebar-logo-wrap">
+                <img src="UKM.png" class="sidebar-logo" alt="UKM">
             </div>
-            
-            <?php else: ?>
-            <!-- Feedback Form -->
-            <div class="feedback-container">
-                <!-- Header -->
-                <div class="welcome-section">
-                    <h1 class="page-title">Maklum Balas Program</h1>
-                    <p class="page-subtitle">Beri penilaian anda terhadap program yang telah dihadiri</p>
-                </div>
+            <h3 class="sidebar-title">UKMInvolve</h3>
+        </div>
 
-                <!-- Program Info -->
-                <div class="program-info">
-                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 8px;"><?= htmlspecialchars($programName) ?></h3>
-                    <div style="display: flex; gap: 24px; font-size: 14px; color: var(--text-secondary);">
-                        <span><i class="fas fa-calendar"></i> <?= htmlspecialchars($programDate) ?></span>
-                        <span><i class="fas fa-map-marker-alt"></i> <?= htmlspecialchars($programLocation) ?></span>
-                    </div>
-                </div>
+        <p class="sidebar-label">Menu</p>
+        <nav class="sidebar-nav">
+            <?php foreach ($menu as $page => $item): ?>
+                <a href="<?= $page ?>.php"
+                   class="sidebar-link <?= ($activePage === $page) ? 'active' : '' ?> <?= ($page === 'logout') ? 'logout-link' : '' ?>">
+                    <i class="fas <?= $item[1] ?>"></i>
+                    <?= $item[0] ?>
+                </a>
+            <?php endforeach; ?>
+        </nav>
+    </div>
 
-                <!-- Feedback Form -->
-                <form method="POST" class="form-section">
-                    <!-- Question 1 -->
-                    <div class="question-group">
-                        <label class="question-label">
-                            1. Bagaimanakah penilaian keseluruhan anda terhadap program ini?<span class="required">*</span>
-                        </label>
-                        <div class="star-rating" id="rating1">
-                            <?php for($i = 1; $i <= 5; $i++): ?>
-                                <button type="button" class="star-btn" data-value="<?= $i ?>">
-                                    <i class="fas fa-star"></i>
-                                </button>
-                            <?php endfor; ?>
-                        </div>
-                        <div class="rating-labels">
-                            <span>Sangat Tidak Memuaskan</span>
-                            <span>Sangat Memuaskan</span>
-                        </div>
-                        <input type="hidden" name="penilaian_keseluruhan" id="penilaian_keseluruhan" value="0">
-                        <div class="error-message" id="error1">Sila berikan penilaian</div>
-                    </div>
+    <div class="user-profile">
+        <div class="user-avatar">P</div>
+        <div>
+            <h4>Pelajar</h4>
+            <p>UKM Account</p>
+        </div>
+    </div>
+</aside>
 
-                    <!-- Question 2 -->
-                    <div class="question-group">
-                        <label class="question-label">
-                            2. Adakah objektif program ini berjaya dicapai?<span class="required">*</span>
-                        </label>
-                        <div class="radio-group" id="rating2">
-                            <?php
-                            $options2 = [
-                                'sangat-tidak-setuju' => 'Sangat Tidak Setuju',
-                                'tidak-setuju' => 'Tidak Setuju',
-                                'neutral' => 'Neutral',
-                                'setuju' => 'Setuju',
-                                'sangat-setuju' => 'Sangat Setuju'
-                            ];
-                            
-                            foreach ($options2 as $value => $label):
-                            ?>
-                            <div class="radio-option" data-value="<?= $value ?>">
-                                <input type="radio" name="pencapaian_objektif" value="<?= $value ?>" 
-                                       id="obj_<?= $value ?>" class="radio-input">
-                                <label for="obj_<?= $value ?>" class="radio-label"><?= $label ?></label>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                        <div class="error-message" id="error2">Sila pilih satu pilihan</div>
-                    </div>
+<main class="main-section">
+<div class="feedback-container">
 
-                    <!-- Question 3 -->
-                    <div class="question-group">
-                        <label class="question-label">
-                            3. Bagaimanakah tahap pengurusan program oleh pihak penganjur?<span class="required">*</span>
-                        </label>
-                        <div class="star-rating" id="rating3">
-                            <?php for($i = 1; $i <= 5; $i++): ?>
-                                <button type="button" class="star-btn" data-value="<?= $i ?>">
-                                    <i class="fas fa-star"></i>
-                                </button>
-                            <?php endfor; ?>
-                        </div>
-                        <div class="rating-labels">
-                            <span>Sangat Lemah</span>
-                            <span>Sangat Baik</span>
-                        </div>
-                        <input type="hidden" name="pengurusan_program" id="pengurusan_program" value="0">
-                        <div class="error-message" id="error3">Sila berikan penilaian</div>
-                    </div>
+<?php if ($submitted): ?>
 
-                    <!-- Question 4 -->
-                    <div class="question-group">
-                        <label class="question-label">
-                            4. Adakah pengisian atau aktiviti yang dijalankan bermanfaat kepada anda?<span class="required">*</span>
-                        </label>
-                        <div class="radio-group" id="rating4">
-                            <?php
-                            $options4 = [
-                                'sangat-tidak-bermanfaat' => 'Sangat Tidak Bermanfaat',
-                                'tidak-bermanfaat' => 'Tidak Bermanfaat',
-                                'neutral' => 'Neutral',
-                                'bermanfaat' => 'Bermanfaat',
-                                'sangat-bermanfaat' => 'Sangat Bermanfaat'
-                            ];
-                            
-                            foreach ($options4 as $value => $label):
-                            ?>
-                            <div class="radio-option" data-value="<?= $value ?>">
-                                <input type="radio" name="kualiti_aktiviti" value="<?= $value ?>" 
-                                       id="akt_<?= $value ?>" class="radio-input">
-                                <label for="akt_<?= $value ?>" class="radio-label"><?= $label ?></label>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                        <div class="error-message" id="error4">Sila pilih satu pilihan</div>
-                    </div>
+    <div class="success-card">
+        <div class="success-icon">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <h2>Thank You!</h2>
+        <p>Your feedback has been submitted successfully and will help improve future programmes.</p>
+        <a href="rekod-penyertaan.php" class="btn-back">
+            <i class="fas fa-arrow-left"></i> Back to History
+        </a>
+    </div>
 
-                    <!-- Question 5 -->
-                    <div class="question-group">
-                        <label class="question-label">
-                            5. Bagaimanakah pengurusan masa dan atur cara program?<span class="required">*</span>
-                        </label>
-                        <div class="star-rating" id="rating5">
-                            <?php for($i = 1; $i <= 5; $i++): ?>
-                                <button type="button" class="star-btn" data-value="<?= $i ?>">
-                                    <i class="fas fa-star"></i>
-                                </button>
-                            <?php endfor; ?>
-                        </div>
-                        <div class="rating-labels">
-                            <span>Sangat Tidak Teratur</span>
-                            <span>Sangat Teratur</span>
-                        </div>
-                        <input type="hidden" name="pengurusan_masa" id="pengurusan_masa" value="0">
-                        <div class="error-message" id="error5">Sila berikan penilaian</div>
-                    </div>
+<?php else: ?>
 
-                    <!-- Question 6 -->
-                    <div class="question-group">
-                        <label class="question-label">
-                            6. Sila nyatakan komen atau cadangan penambahbaikan untuk program ini
-                        </label>
-                        <textarea 
-                            name="komen" 
-                            class="feedback-textarea" 
-                            placeholder="Contoh: Pengurusan masa sangat baik, tetapi aktiviti boleh dipelbagaikan...">
-                        </textarea>
-                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: -8px;">
-                            Komen adalah pilihan tetapi sangat dihargai
-                        </p>
-                    </div>
+    <div class="page-header">
+        <h1>Feedback</h1>
+        <p>Share your experience and help improve future UKMInvolve events.</p>
+    </div>
 
-                    <div style="padding-top: 24px; border-top: 1px solid var(--border);">
-                        <button type="submit" name="submit_feedback" class="btn-primary" style="width: 100%; padding: 16px; font-size: 16px;">
-                            <i class="fas fa-paper-plane"></i> Hantar Maklum Balas
-                        </button>
-                    </div>
-                </form>
+    <div class="program-card">
+        <h3><?= htmlspecialchars($programName) ?></h3>
+        <div class="program-meta">
+            <span><i class="fas fa-calendar"></i><?= htmlspecialchars($programDate) ?></span>
+            <span><i class="fas fa-location-dot"></i><?= htmlspecialchars($programLocation) ?></span>
+        </div>
+    </div>
+
+    <form method="POST" class="form-card" id="feedbackForm">
+
+        <div class="question-group">
+            <label class="question-label">1. Overall rating for this programme <span class="required">*</span></label>
+            <div class="star-rating" data-input="penilaian_keseluruhan">
+                <?php for($i=1; $i<=5; $i++): ?>
+                    <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
+                <?php endfor; ?>
             </div>
-            <?php endif; ?>
-        </section>
-    </main>
+            <div class="rating-labels">
+                <span>Very Poor</span><span>Excellent</span>
+            </div>
+            <input type="hidden" name="penilaian_keseluruhan" id="penilaian_keseluruhan" value="0">
+            <div class="error-message">Please give a rating</div>
+        </div>
+
+        <div class="question-group">
+            <label class="question-label">2. Were the programme objectives achieved? <span class="required">*</span></label>
+            <div class="radio-group">
+                <?php foreach(['Strongly Disagree','Disagree','Neutral','Agree','Strongly Agree'] as $option): ?>
+                    <label class="radio-option">
+                        <input type="radio" name="pencapaian_objektif" value="<?= $option ?>" class="radio-input">
+                        <?= $option ?>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+            <div class="error-message">Please choose one option</div>
+        </div>
+
+        <div class="question-group">
+            <label class="question-label">3. How was the programme management? <span class="required">*</span></label>
+            <div class="star-rating" data-input="pengurusan_program">
+                <?php for($i=1; $i<=5; $i++): ?>
+                    <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
+                <?php endfor; ?>
+            </div>
+            <div class="rating-labels">
+                <span>Poor</span><span>Excellent</span>
+            </div>
+            <input type="hidden" name="pengurusan_program" id="pengurusan_program" value="0">
+            <div class="error-message">Please give a rating</div>
+        </div>
+
+        <div class="question-group">
+            <label class="question-label">4. Was the programme beneficial to you? <span class="required">*</span></label>
+            <div class="radio-group">
+                <?php foreach(['Not Beneficial','Less Beneficial','Neutral','Beneficial','Very Beneficial'] as $option): ?>
+                    <label class="radio-option">
+                        <input type="radio" name="kualiti_aktiviti" value="<?= $option ?>" class="radio-input">
+                        <?= $option ?>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+            <div class="error-message">Please choose one option</div>
+        </div>
+
+        <div class="question-group">
+            <label class="question-label">5. Time management and programme flow <span class="required">*</span></label>
+            <div class="star-rating" data-input="pengurusan_masa">
+                <?php for($i=1; $i<=5; $i++): ?>
+                    <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
+                <?php endfor; ?>
+            </div>
+            <div class="rating-labels">
+                <span>Not Organized</span><span>Very Organized</span>
+            </div>
+            <input type="hidden" name="pengurusan_masa" id="pengurusan_masa" value="0">
+            <div class="error-message">Please give a rating</div>
+        </div>
+
+        <div class="question-group">
+            <label class="question-label">6. Comments or suggestions</label>
+            <textarea name="komen" class="feedback-textarea" placeholder="Example: The programme was useful, but the activities could be more interactive..."></textarea>
+            <p style="font-size:12px;color:var(--muted);margin-top:8px;">Optional but highly appreciated.</p>
+        </div>
+
+        <button type="submit" name="submit_feedback" class="btn-submit">
+            <i class="fas fa-paper-plane"></i> Submit Feedback
+        </button>
+
+    </form>
+
+<?php endif; ?>
+
+</div>
+</main>
 </div>
 
 <script>
-    // Initialize star ratings
-    document.addEventListener('DOMContentLoaded', function() {
-        // Setup star ratings
-        const starContainers = document.querySelectorAll('.star-rating');
-        starContainers.forEach(container => {
-            const stars = container.querySelectorAll('.star-btn');
-            const hiddenInput = container.nextElementSibling.nextElementSibling;
-            
-            stars.forEach(star => {
-                // Click event
-                star.addEventListener('click', function() {
-                    const value = parseInt(this.getAttribute('data-value'));
-                    
-                    // Update star colors
-                    stars.forEach(s => {
-                        const starValue = parseInt(s.getAttribute('data-value'));
-                        if (starValue <= value) {
-                            s.classList.add('active');
-                            s.querySelector('i').style.color = '#f59e0b';
-                        } else {
-                            s.classList.remove('active');
-                            s.querySelector('i').style.color = '#ddd';
-                        }
-                    });
-                    
-                    // Update hidden input
-                    hiddenInput.value = value;
-                    
-                    // Clear error
-                    const errorDiv = container.nextElementSibling.nextElementSibling.nextElementSibling;
-                    errorDiv.style.display = 'none';
-                });
-                
-                // Hover events
-                star.addEventListener('mouseenter', function() {
-                    const value = parseInt(this.getAttribute('data-value'));
-                    
-                    stars.forEach(s => {
-                        const starValue = parseInt(s.getAttribute('data-value'));
-                        if (starValue <= value) {
-                            s.classList.add('hovered');
-                            s.querySelector('i').style.color = '#fbbf24';
-                        }
-                    });
-                });
-                
-                star.addEventListener('mouseleave', function() {
-                    stars.forEach(s => {
-                        s.classList.remove('hovered');
-                        
-                        // Restore original color
-                        const starValue = parseInt(s.getAttribute('data-value'));
-                        const currentValue = parseInt(hiddenInput.value);
-                        
-                        if (starValue <= currentValue) {
-                            s.querySelector('i').style.color = '#f59e0b';
-                        } else {
-                            s.querySelector('i').style.color = '#ddd';
-                        }
-                    });
-                });
+document.querySelectorAll('.star-rating').forEach(group => {
+    const input = document.getElementById(group.dataset.input);
+    const stars = group.querySelectorAll('.star-btn');
+
+    stars.forEach(star => {
+        star.addEventListener('click', () => {
+            const value = parseInt(star.dataset.value);
+            input.value = value;
+
+            stars.forEach(s => {
+                s.classList.toggle('active', parseInt(s.dataset.value) <= value);
             });
+
+            group.parentElement.querySelector('.error-message').style.display = 'none';
         });
-        
-        // Setup radio options
-        const radioOptions = document.querySelectorAll('.radio-option');
-        radioOptions.forEach(option => {
-            const radioInput = option.querySelector('.radio-input');
-            
-            option.addEventListener('click', function() {
-                // Remove selected class from siblings
-                const siblings = this.parentElement.querySelectorAll('.radio-option');
-                siblings.forEach(sib => {
-                    sib.classList.remove('selected');
-                });
-                
-                // Add selected class to clicked option
-                this.classList.add('selected');
-                
-                // Check the radio input
-                radioInput.checked = true;
-                
-                // Clear error
-                const errorDiv = this.parentElement.nextElementSibling;
-                errorDiv.style.display = 'none';
-            });
-        });
-        
-        // Form validation
-        const form = document.querySelector('form');
-        if (form) {
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                
-                let isValid = true;
-                
-                // Check star ratings
-                const starInputs = [
-                    { input: document.getElementById('penilaian_keseluruhan'), error: 'error1' },
-                    { input: document.getElementById('pengurusan_program'), error: 'error3' },
-                    { input: document.getElementById('pengurusan_masa'), error: 'error5' }
-                ];
-                
-                starInputs.forEach(item => {
-                    if (item.input.value === '0') {
-                        document.getElementById(item.error).style.display = 'block';
-                        isValid = false;
-                    } else {
-                        document.getElementById(item.error).style.display = 'none';
-                    }
-                });
-                
-                // Check radio groups
-                const radioGroups = [
-                    { name: 'pencapaian_objektif', error: 'error2' },
-                    { name: 'kualiti_aktiviti', error: 'error4' }
-                ];
-                
-                radioGroups.forEach(group => {
-                    const checked = document.querySelector(`input[name="${group.name}"]:checked`);
-                    if (!checked) {
-                        document.getElementById(group.error).style.display = 'block';
-                        isValid = false;
-                    } else {
-                        document.getElementById(group.error).style.display = 'none';
-                    }
-                });
-                
-                if (isValid) {
-                    // Submit form
-                    this.submit();
-                } else {
-                    // Scroll to first error
-                    const firstError = document.querySelector('.error-message[style*="display: block"]');
-                    if (firstError) {
-                        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
+    });
+});
+
+document.querySelectorAll('.radio-option').forEach(option => {
+    option.addEventListener('click', () => {
+        const group = option.parentElement;
+        group.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
+        option.classList.add('selected');
+        option.querySelector('input').checked = true;
+        group.parentElement.querySelector('.error-message').style.display = 'none';
+    });
+});
+
+const form = document.getElementById('feedbackForm');
+if (form) {
+    form.addEventListener('submit', function(e) {
+        let valid = true;
+
+        document.querySelectorAll('.question-group').forEach(group => {
+            const hidden = group.querySelector('input[type="hidden"]');
+            const radios = group.querySelectorAll('input[type="radio"]');
+            const error = group.querySelector('.error-message');
+
+            if (hidden && hidden.value === '0') {
+                error.style.display = 'block';
+                valid = false;
+            }
+
+            if (radios.length > 0) {
+                const checked = group.querySelector('input[type="radio"]:checked');
+                if (!checked) {
+                    error.style.display = 'block';
+                    valid = false;
                 }
+            }
+        });
+
+        if (!valid) {
+            e.preventDefault();
+            document.querySelector('.error-message[style*="block"]').scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
             });
         }
     });
+}
 </script>
 
 </body>

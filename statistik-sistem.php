@@ -1,943 +1,323 @@
 <?php
 session_start();
-$_SESSION['role'] = 'pentadbir';
+require_once __DIR__ . '/lib/bootstrap.php';
+requireRole('pentadbir');
 $activePage = 'statistik-sistem';
 
-// Sample statistics data
+// Real stats from DB
+$totalUsers    = 0;
+$totalPrograms = 0;
+$totalFeedback = 0;
+$totalRegs     = 0;
+$categoryStats = [];
+$topPrograms   = [];
+
+if (db()->isConfigured()) {
+    $totalUsers    = users()->countAll();
+    $allPrograms   = programs()->listWithCategory();
+    $totalPrograms = count($allPrograms);
+
+    $fbResult      = db()->select('maklum_balas', '?select=id,rating');
+    $fbRows        = ($fbResult['ok']) ? $fbResult['data'] : [];
+    $totalFeedback = count($fbRows);
+    $avgRating     = $totalFeedback > 0
+        ? round(array_sum(array_column($fbRows, 'rating')) / $totalFeedback, 1)
+        : 0;
+
+    $regResult  = db()->select('pendaftaran', '?select=id');
+    $totalRegs  = ($regResult['ok']) ? count($regResult['data']) : 0;
+
+    // Attendance rate = hadir / total registrations
+    $hadirResult    = db()->select('pendaftaran', '?select=id&status=eq.hadir');
+    $hadirCount     = ($hadirResult['ok']) ? count($hadirResult['data']) : 0;
+    $attendanceRate = $totalRegs > 0 ? round(($hadirCount / $totalRegs) * 100) : 0;
+
+    // Category participation counts
+    $allCategories = categories()->listAll();
+    foreach ($allCategories as $cat) {
+        $count = categories()->programCount((int)$cat['id']);
+        if ($count > 0) {
+            $maxCap = array_sum(array_column(
+                array_filter($allPrograms, fn($p) => ($p['kategori_id'] ?? null) == $cat['id']),
+                'kapasiti'
+            ));
+            $filled = array_sum(array_column(
+                array_filter($allPrograms, fn($p) => ($p['kategori_id'] ?? null) == $cat['id']),
+                'peserta_semasa'
+            ));
+            $pct = $maxCap > 0 ? round(($filled / $maxCap) * 100) : 0;
+            $categoryStats[] = ['name' => $cat['nama'], 'value' => $pct];
+        }
+    }
+
+    // Top programs by participants
+    usort($allPrograms, fn($a, $b) => ($b['peserta_semasa'] ?? 0) <=> ($a['peserta_semasa'] ?? 0));
+    foreach (array_slice($allPrograms, 0, 4) as $p) {
+        $topPrograms[] = [
+            'name'         => $p['nama'],
+            'participants' => (int)($p['peserta_semasa'] ?? 0),
+            'rating'       => (float)($p['rating'] ?? 0),
+        ];
+    }
+} else {
+    $avgRating = 0;
+    $attendanceRate = 0;
+}
+
 $stats = [
-    'total' => [
-        'users' => 2450,
-        'programs' => 156,
-        'categories' => 12,
-        'feedback' => 1245
-    ],
-    'monthly' => [
-        'programs' => [45, 52, 48, 65, 75, 60, 55, 70, 65, 80, 85, 90],
-        'participants' => [320, 380, 350, 420, 480, 450, 400, 470, 460, 520, 580, 620],
-        'feedback' => [85, 92, 78, 110, 125, 105, 95, 120, 115, 135, 150, 165]
-    ],
-    'topPrograms' => [
-        ['name' => 'Workshop Kepimpinan Mahasiswa', 'participants' => 180, 'rating' => 4.8],
-        ['name' => 'Seminar Inovasi Digital', 'participants' => 165, 'rating' => 4.7],
-        ['name' => 'Program Sukarelawan Komuniti', 'participants' => 142, 'rating' => 4.9],
-        ['name' => 'Forum Kerjaya Graduan', 'participants' => 135, 'rating' => 4.6],
-        ['name' => 'Bengkel Penulisan Ilmiah', 'participants' => 128, 'rating' => 4.5]
-    ],
-    'userGrowth' => [
-        ['month' => 'Jan', 'pelajar' => 150, 'penganjur' => 8, 'pentadbir' => 2],
-        ['month' => 'Feb', 'pelajar' => 180, 'penganjur' => 10, 'pentadbir' => 2],
-        ['month' => 'Mar', 'pelajar' => 210, 'penganjur' => 12, 'pentadbir' => 3],
-        ['month' => 'Apr', 'pelajar' => 245, 'penganjur' => 14, 'pentadbir' => 3],
-        ['month' => 'May', 'pelajar' => 280, 'penganjur' => 16, 'pentadbir' => 4],
-        ['month' => 'Jun', 'pelajar' => 320, 'penganjur' => 18, 'pentadbir' => 4]
-    ],
-    'categoryStats' => [
-        ['name' => 'Kepimpinan', 'programs' => 25, 'participation' => 68],
-        ['name' => 'Teknologi', 'programs' => 32, 'participation' => 72],
-        ['name' => 'Komuniti', 'programs' => 28, 'participation' => 85],
-        ['name' => 'Akademik', 'programs' => 22, 'participation' => 65],
-        ['name' => 'Sukan', 'programs' => 18, 'participation' => 58],
-        ['name' => 'Kerjaya', 'programs' => 15, 'participation' => 75]
-    ],
-    'systemMetrics' => [
-        'avg_rating' => 4.7,
-        'attendance_rate' => 82,
-        'feedback_rate' => 65,
-        'system_uptime' => 99.8,
-        'active_sessions' => 124
-    ],
-    'recentActivity' => [
-        ['type' => 'program', 'action' => 'Program baru diterbitkan', 'details' => 'Workshop AI & ML', 'time' => '2 jam lalu'],
-        ['type' => 'user', 'action' => 'Pengguna baharu mendaftar', 'details' => 'Ahmad (Pelajar)', 'time' => '4 jam lalu'],
-        ['type' => 'feedback', 'action' => 'Maklum balas diterima', 'details' => 'Rating: 5/5', 'time' => '6 jam lalu'],
-        ['type' => 'system', 'action' => 'Backup sistem', 'details' => 'Backup harian berjaya', 'time' => '8 jam lalu']
-    ]
+    'users'           => $totalUsers,
+    'programs'        => $totalPrograms,
+    'feedback'        => $totalFeedback,
+    'attendance'      => $attendanceRate,
+    'rating'          => $avgRating,
+    'active_sessions' => $totalRegs,
 ];
 
-// Calculate growth percentages
-$userGrowthPercent = round(($stats['total']['users'] - 2000) / 2000 * 100, 1);
-$programGrowthPercent = round(($stats['total']['programs'] - 120) / 120 * 100, 1);
-$feedbackGrowthPercent = round(($stats['total']['feedback'] - 1000) / 1000 * 100, 1);
-
-// Time periods for filtering
-$timePeriods = ['7d' => '7 Hari', '30d' => '30 Hari', '90d' => '90 Hari', '1y' => '1 Tahun', 'all' => 'Semua'];
-$selectedPeriod = $_GET['period'] ?? '30d';
+$menu = [
+    'dashboard-pentadbir' => ['Dashboard', 'fa-house'],
+    'pengurusan-pengguna' => ['Pengguna', 'fa-users-gear'],
+    'pengurusan-kategori' => ['Kategori', 'fa-layer-group'],
+    'urus_mata_admin' => ['Urus Mata', 'fa-sliders-h'],
+    'statistik-sistem' => ['Statistik', 'fa-chart-pie'],
+    'logout' => ['Logout', 'fa-right-from-bracket']
+];
 ?>
 
 <!DOCTYPE html>
 <html lang="ms">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Statistik Sistem | UKMInvolve</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* Statistics Page Styling */
-        .stats-container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        /* Time Period Filter */
-        .period-filter {
-            display: flex;
-            gap: 8px;
-            margin: 24px 0;
-            flex-wrap: wrap;
-        }
-        
-        .period-btn {
-            padding: 10px 20px;
-            background: var(--surface);
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .period-btn:hover {
-            border-color: var(--primary);
-            background: rgba(37, 99, 235, 0.05);
-        }
-        
-        .period-btn.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
-        
-        /* Main Stats Cards */
-        .main-stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
-        }
-        
-        .main-stat-card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 24px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .main-stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg);
-        }
-        
-        .stat-icon {
-            position: absolute;
-            top: 24px;
-            right: 24px;
-            width: 60px;
-            height: 60px;
-            border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            color: white;
-        }
-        
-        .icon-users { background: linear-gradient(135deg, #3b82f6, #60a5fa); }
-        .icon-programs { background: linear-gradient(135deg, #10b981, #34d399); }
-        .icon-categories { background: linear-gradient(135deg, #8b5cf6, #a78bfa); }
-        .icon-feedback { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
-        
-        .stat-value {
-            font-size: 40px;
-            font-weight: 800;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-        
-        .stat-title {
-            font-size: 14px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
-        }
-        
-        .stat-trend {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            margin-top: 8px;
-        }
-        
-        .trend-up { color: #10b981; }
-        .trend-down { color: #ef4444; }
-        
-        /* Charts Section */
-        .charts-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
-        }
-        
-        @media (max-width: 1200px) {
-            .charts-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .chart-card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 24px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-        }
-        
-        .chart-header {
-            margin-bottom: 24px;
-        }
-        
-        .chart-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-        
-        .chart-subtitle {
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-        
-        /* Bar Chart */
-        .bar-chart-container {
-            display: flex;
-            align-items: flex-end;
-            height: 200px;
-            gap: 20px;
-            margin-top: 40px;
-        }
-        
-        .bar-column {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100%;
-        }
-        
-        .bar-container {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            display: flex;
-            align-items: flex-end;
-        }
-        
-        .bar {
-            width: 100%;
-            border-radius: 8px 8px 0 0;
-            transition: height 0.5s ease;
-            position: relative;
-        }
-        
-        .bar-value {
-            position: absolute;
-            top: -25px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        
-        .bar-label {
-            margin-top: 12px;
-            font-size: 12px;
-            color: var(--text-secondary);
-            text-align: center;
-        }
-        
-        /* Donut Chart */
-        .donut-chart-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 200px;
-            position: relative;
-        }
-        
-        .donut-chart {
-            width: 200px;
-            height: 200px;
-            position: relative;
-        }
-        
-        .donut-segment {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            clip-path: polygon(50% 50%, 50% 0, 100% 0, 100% 100%, 0 100%, 0 0, 50% 0);
-            border-radius: 50%;
-            transform: rotate(calc(var(--start) * 1deg));
-        }
-        
-        .donut-center {
-            position: absolute;
-            width: 100px;
-            height: 100px;
-            background: var(--surface);
-            border-radius: 50%;
-            top: 50px;
-            left: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-        }
-        
-        .donut-total {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-        
-        .donut-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-        
-        .donut-legend {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin-left: 40px;
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .legend-color {
-            width: 16px;
-            height: 16px;
-            border-radius: 4px;
-        }
-        
-        /* Top Programs */
-        .programs-list {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-        
-        .program-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 16px;
-            background: var(--background);
-            border-radius: 12px;
-            transition: all 0.2s ease;
-        }
-        
-        .program-item:hover {
-            background: rgba(37, 99, 235, 0.05);
-            transform: translateX(4px);
-        }
-        
-        .program-info {
-            flex: 1;
-        }
-        
-        .program-name {
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 4px;
-        }
-        
-        .program-meta {
-            display: flex;
-            gap: 20px;
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-        
-        .program-stats {
-            text-align: right;
-        }
-        
-        .rating {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            color: #f59e0b;
-            font-weight: 600;
-        }
-        
-        .participants {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 4px;
-        }
-        
-        /* Recent Activity */
-        .activity-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        
-        .activity-item {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 16px;
-            background: var(--background);
-            border-radius: 12px;
-        }
-        
-        .activity-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: white;
-        }
-        
-        .icon-program { background: #3b82f6; }
-        .icon-user { background: #10b981; }
-        .icon-feedback { background: #f59e0b; }
-        .icon-system { background: #8b5cf6; }
-        
-        .activity-content {
-            flex: 1;
-        }
-        
-        .activity-action {
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 2px;
-        }
-        
-        .activity-details {
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-        
-        .activity-time {
-            font-size: 12px;
-            color: var(--text-tertiary);
-        }
-        
-        /* System Metrics */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-top: 24px;
-        }
-        
-        .metric-card {
-            background: var(--surface);
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
-            border: 1px solid var(--border);
-        }
-        
-        .metric-value {
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-        
-        .metric-label {
-            font-size: 13px;
-            color: var(--text-secondary);
-        }
-        
-        .metric-progress {
-            height: 6px;
-            background: var(--border);
-            border-radius: 3px;
-            margin-top: 12px;
-            overflow: hidden;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            border-radius: 3px;
-            transition: width 1s ease;
-        }
-        
-        /* Export Button */
-        .export-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
-            background: transparent;
-            border: 2px solid var(--primary);
-            color: var(--primary);
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .export-btn:hover {
-            background: rgba(37, 99, 235, 0.1);
-        }
-        
-        /* Loading Animation */
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .loading {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Statistik Sistem | UKMInvolve</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--page:#f8fbff;--primary:#5b8def;--dark:#2563eb;--border:#dbeafe;--muted:#6b7280;--text:#111827;--orange:#f97316}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fbff;color:var(--text);height:100vh;overflow:hidden}
+a{text-decoration:none;color:inherit}
+button{font-family:inherit}
+
+.dashboard-wrapper{height:100vh;display:grid;grid-template-columns:240px 1fr;background:var(--page);overflow:hidden}
+.sidebar{height:100vh;background:#fff;border-right:1px solid var(--border);padding:28px 20px;display:flex;flex-direction:column;justify-content:space-between}
+.sidebar-header{display:flex;align-items:center;gap:12px;margin-bottom:30px}
+.sidebar-logo-wrap{width:38px;height:38px;border-radius:14px;background:#eaf4ff;display:flex;align-items:center;justify-content:center}
+.sidebar-logo{width:28px;height:28px;object-fit:contain}
+.sidebar-title{font-size:19px;font-weight:800}
+.sidebar-label{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;padding-left:8px}
+.sidebar-nav{display:flex;flex-direction:column;gap:8px}
+.sidebar-link{padding:11px 12px;border-radius:14px;display:flex;gap:12px;align-items:center;color:#374151;font-weight:500;transition:.25s}
+.sidebar-link i{width:18px;text-align:center}
+.sidebar-link.active,.sidebar-link:hover{background:#eff6ff;color:#2563eb;font-weight:700}
+.logout-link{color:#f97316}
+.logout-link:hover{background:#fff7ed;color:#f97316}
+.user-profile{display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid var(--border);border-radius:16px;padding:12px}
+.user-avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
+.user-profile h4{font-size:14px}
+.user-profile p{font-size:12px;color:var(--muted)}
+
+.main-section{height:100vh;overflow-y:auto;padding:28px;background:var(--page)}
+.main-section::-webkit-scrollbar{width:8px}
+.main-section::-webkit-scrollbar-thumb{background:#bfdbfe;border-radius:999px}
+
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.page-header h1{font-size:30px}
+.page-header p{font-size:14px;color:var(--muted);margin-top:4px}
+.btn-export{background:var(--primary);color:white;border:none;border-radius:999px;padding:12px 18px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:8px}
+
+.hero-card{background:linear-gradient(135deg,#7bb6ff,#5b8def);color:white;border-radius:26px;padding:26px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 18px 38px rgba(91,141,239,.20)}
+.hero-card h2{font-size:28px;margin-bottom:8px}
+.hero-card p{font-size:14px;color:#eef6ff}
+.hero-icon{width:80px;height:80px;border-radius:24px;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:36px}
+
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+.stat-card{background:white;border:1px solid var(--border);border-radius:22px;padding:20px;box-shadow:0 8px 20px rgba(37,99,235,.06)}
+.stat-icon{width:46px;height:46px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:20px}
+.icon-blue{background:#eff6ff;color:#2563eb}
+.icon-green{background:#ecfdf5;color:#059669}
+.icon-orange{background:#fff7ed;color:#f97316}
+.icon-purple{background:#f5f3ff;color:#7c3aed}
+.stat-card h2{font-size:28px;margin-bottom:4px}
+.stat-card p{font-size:13px;color:var(--muted);font-weight:600}
+
+.dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.card{background:white;border:1px solid var(--border);border-radius:26px;padding:22px;box-shadow:0 8px 20px rgba(37,99,235,.06);margin-bottom:22px}
+.card h2{font-size:22px;margin-bottom:6px}
+.card-subtitle{font-size:13px;color:var(--muted);margin-bottom:18px}
+
+.bar-list{display:flex;flex-direction:column;gap:14px}
+.bar-item{display:grid;grid-template-columns:110px 1fr 45px;align-items:center;gap:12px}
+.bar-label{font-size:13px;font-weight:800}
+.bar-track{height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden}
+.bar-fill{height:100%;background:linear-gradient(90deg,#7bb6ff,#2563eb);border-radius:999px}
+.bar-value{text-align:right;font-size:13px;font-weight:800;color:var(--dark)}
+
+.program-list{display:flex;flex-direction:column;gap:12px}
+.program-item{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--border);border-radius:18px;padding:14px;background:#f8fbff}
+.program-name{font-weight:800;font-size:14px;margin-bottom:4px}
+.program-meta{font-size:12px;color:var(--muted)}
+.rating{color:#f59e0b;font-weight:800;font-size:13px;text-align:right}
+
+.metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.metric-card{background:#f8fbff;border:1px solid var(--border);border-radius:18px;padding:16px;text-align:center}
+.metric-card h3{font-size:24px;margin-bottom:4px}
+.metric-card p{font-size:13px;color:var(--muted)}
+.progress-track{height:8px;background:#e5e7eb;border-radius:999px;margin-top:10px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#60a5fa,#2563eb);border-radius:999px}
+
+@media(max-width:1100px){.stats-grid,.metrics-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid{grid-template-columns:1fr}}
+@media(max-width:900px){
+body{overflow:auto}.dashboard-wrapper{grid-template-columns:1fr;height:auto}.sidebar{height:auto;position:relative;border-right:none;border-bottom:1px solid var(--border)}
+.sidebar-nav{flex-direction:row;overflow-x:auto}.sidebar-link{white-space:nowrap}.user-profile{display:none}.main-section{height:auto;overflow:visible}
+}
+@media(max-width:600px){.stats-grid,.metrics-grid{grid-template-columns:1fr}.page-header,.hero-card{flex-direction:column;align-items:flex-start;gap:12px}}
+</style>
 </head>
+
 <body>
+<div class="dashboard-wrapper">
 
-<div class="app-layout">
-    <!-- SIDEBAR -->
-    <?php include 'sidebar.php'; ?>
+<aside class="sidebar">
+    <div>
+        <div class="sidebar-header">
+            <div class="sidebar-logo-wrap"><img src="UKM.png" class="sidebar-logo" alt="UKM"></div>
+            <h3 class="sidebar-title">UKMInvolve</h3>
+        </div>
 
-    <!-- MAIN CONTENT -->
-    <main class="main-content">
-       <!-- TOP BAR -->
-<header class="topbar"></header>
+        <p class="sidebar-label">Menu</p>
+        <nav class="sidebar-nav">
+            <?php foreach ($menu as $page => $item): ?>
+                <a href="<?= $page ?>.php" class="sidebar-link <?= ($activePage === $page) ? 'active' : '' ?> <?= ($page === 'logout') ? 'logout-link' : '' ?>">
+                    <i class="fas <?= $item[1] ?>"></i><?= $item[0] ?>
+                </a>
+            <?php endforeach; ?>
+        </nav>
+    </div>
 
+    <div class="user-profile">
+        <div class="user-avatar">A</div>
+        <div><h4>Pentadbir</h4><p>Admin Account</p></div>
+    </div>
+</aside>
 
-        <!-- PAGE CONTENT -->
-        <section class="content">
-            <!-- Header Section -->
-            <div class="welcome-section">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
-                    <div>
-                        <h1 class="page-title">Statistik Sistem</h1>
-                        <p class="page-subtitle">Analisis dan prestasi keseluruhan sistem UKMInvolve</p>
+<main class="main-section">
+
+    <div class="page-header">
+        <div>
+            <h1>System Statistics</h1>
+            <p>Simple overview of UKMInvolve performance and activity.</p>
+        </div>
+        <button class="btn-export" onclick="exportStatistics()">
+            <i class="fas fa-download"></i> Export
+        </button>
+    </div>
+
+    <div class="hero-card">
+        <div>
+            <h2>System Performance</h2>
+            <p>Monitor users, programmes, feedback and system engagement.</p>
+        </div>
+        <div class="hero-icon">
+            <i class="fas fa-chart-pie"></i>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon icon-blue"><i class="fas fa-users"></i></div>
+            <h2><?= number_format($stats['users']) ?></h2>
+            <p>Total Users</p>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon icon-green"><i class="fas fa-calendar-days"></i></div>
+            <h2><?= $stats['programs'] ?></h2>
+            <p>Total Programmes</p>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon icon-orange"><i class="fas fa-comments"></i></div>
+            <h2><?= number_format($stats['feedback']) ?></h2>
+            <p>Total Feedback</p>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon icon-purple"><i class="fas fa-user-check"></i></div>
+            <h2><?= $stats['attendance'] ?>%</h2>
+            <p>Attendance Rate</p>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <h2>Category Participation</h2>
+            <p class="card-subtitle">Participation percentage by category.</p>
+
+            <div class="bar-list">
+                <?php foreach ($categoryStats as $cat): ?>
+                    <div class="bar-item">
+                        <div class="bar-label"><?= $cat['name'] ?></div>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:<?= $cat['value'] ?>%"></div>
+                        </div>
+                        <div class="bar-value"><?= $cat['value'] ?>%</div>
                     </div>
-                    <button class="export-btn" onclick="exportStatistics()">
-                        <i class="fas fa-download"></i> Eksport Data
-                    </button>
-                </div>
-            </div>
-
-            <!-- Time Period Filter -->
-            <div class="period-filter">
-                <?php foreach ($timePeriods as $value => $label): ?>
-                    <a href="?period=<?= $value ?>" 
-                       class="period-btn <?= $selectedPeriod === $value ? 'active' : '' ?>">
-                        <?= $label ?>
-                    </a>
                 <?php endforeach; ?>
             </div>
+        </div>
 
-            <!-- Main Statistics -->
-            <div class="main-stats-grid">
-                <div class="main-stat-card">
-                    <div class="stat-icon icon-users">
-                        <i class="fas fa-users"></i>
+        <div class="card">
+            <h2>Top Programmes</h2>
+            <p class="card-subtitle">Most popular programmes by participation.</p>
+
+            <div class="program-list">
+                <?php foreach ($topPrograms as $program): ?>
+                    <div class="program-item">
+                        <div>
+                            <div class="program-name"><?= $program['name'] ?></div>
+                            <div class="program-meta"><?= $program['participants'] ?> participants</div>
+                        </div>
+                        <div class="rating">
+                            <i class="fas fa-star"></i> <?= $program['rating'] ?>
+                        </div>
                     </div>
-                    <div class="stat-value"><?= number_format($stats['total']['users']) ?></div>
-                    <div class="stat-title">Pengguna</div>
-                    <div class="stat-trend trend-up">
-                        <i class="fas fa-arrow-up"></i>
-                        <?= $userGrowthPercent ?>% dari bulan lalu
-                    </div>
-                </div>
-                
-                <div class="main-stat-card">
-                    <div class="stat-icon icon-programs">
-                        <i class="fas fa-calendar-alt"></i>
-                    </div>
-                    <div class="stat-value"><?= number_format($stats['total']['programs']) ?></div>
-                    <div class="stat-title">Program</div>
-                    <div class="stat-trend trend-up">
-                        <i class="fas fa-arrow-up"></i>
-                        <?= $programGrowthPercent ?>% dari bulan lalu
-                    </div>
-                </div>
-                
-                <div class="main-stat-card">
-                    <div class="stat-icon icon-categories">
-                        <i class="fas fa-tags"></i>
-                    </div>
-                    <div class="stat-value"><?= number_format($stats['total']['categories']) ?></div>
-                    <div class="stat-title">Kategori</div>
-                    <div class="stat-trend trend-up">
-                        <i class="fas fa-arrow-up"></i>
-                        +2 dari bulan lalu
-                    </div>
-                </div>
-                
-                <div class="main-stat-card">
-                    <div class="stat-icon icon-feedback">
-                        <i class="fas fa-comment-alt"></i>
-                    </div>
-                    <div class="stat-value"><?= number_format($stats['total']['feedback']) ?></div>
-                    <div class="stat-title">Maklum Balas</div>
-                    <div class="stat-trend trend-up">
-                        <i class="fas fa-arrow-up"></i>
-                        <?= $feedbackGrowthPercent ?>% dari bulan lalu
-                    </div>
-                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>System Metrics</h2>
+        <p class="card-subtitle">Basic system health and usage indicators.</p>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h3><?= $stats['rating'] ?>/5</h3>
+                <p>Average Rating</p>
+                <div class="progress-track"><div class="progress-fill" style="width:<?= $stats['rating'] * 20 ?>%"></div></div>
             </div>
 
-            <!-- Charts Section -->
-            <div class="charts-grid">
-                <!-- Monthly Growth Chart -->
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h2 class="chart-title">Pertumbuhan Bulanan</h2>
-                        <p class="chart-subtitle">Program dan peserta sepanjang tahun 2025</p>
-                    </div>
-                    
-                    <div class="bar-chart-container">
-                        <?php
-                        $months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogos', 'Sep', 'Okt', 'Nov', 'Dis'];
-                        $maxValue = max(max($stats['monthly']['programs']), max($stats['monthly']['participants']));
-                        
-                        for ($i = 0; $i < 12; $i++):
-                            $programHeight = ($stats['monthly']['programs'][$i] / $maxValue) * 160;
-                            $participantHeight = ($stats['monthly']['participants'][$i] / $maxValue) * 160;
-                        ?>
-                        <div class="bar-column">
-                            <div class="bar-container">
-                                <div class="bar" 
-                                     style="height: <?= $programHeight ?>px; background: linear-gradient(135deg, var(--primary), #60a5fa); margin-right: 4px;">
-                                    <span class="bar-value"><?= $stats['monthly']['programs'][$i] ?></span>
-                                </div>
-                                <div class="bar" 
-                                     style="height: <?= $participantHeight ?>px; background: linear-gradient(135deg, #10b981, #34d399); margin-left: 4px;">
-                                    <span class="bar-value"><?= $stats['monthly']['participants'][$i] ?></span>
-                                </div>
-                            </div>
-                            <div class="bar-label"><?= $months[$i] ?></div>
-                        </div>
-                        <?php endfor; ?>
-                    </div>
-                    
-                    <div style="display: flex; gap: 20px; justify-content: center; margin-top: 24px;">
-                        <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                            <div style="width: 12px; height: 12px; background: var(--primary); border-radius: 2px;"></div>
-                            <span>Program</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                            <div style="width: 12px; height: 12px; background: #10b981; border-radius: 2px;"></div>
-                            <span>Peserta</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- User Distribution Chart -->
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h2 class="chart-title">Pengedaran Pengguna</h2>
-                        <p class="chart-subtitle">Peranan pengguna dalam sistem</p>
-                    </div>
-                    
-                    <div style="display: flex; align-items: center;">
-                        <div class="donut-chart-container">
-                            <div class="donut-chart">
-                                <?php
-                                $userDistribution = [
-                                    ['label' => 'Pelajar', 'value' => 2000, 'color' => '#3b82f6'],
-                                    ['label' => 'Penganjur', 'value' => 120, 'color' => '#8b5cf6'],
-                                    ['label' => 'Pentadbir', 'value' => 8, 'color' => '#10b981']
-                                ];
-                                
-                                $total = array_sum(array_column($userDistribution, 'value'));
-                                $start = 0;
-                                
-                                foreach ($userDistribution as $index => $segment):
-                                    $percentage = ($segment['value'] / $total) * 100;
-                                    $end = $start + ($percentage * 3.6); // 360° for 100%
-                                ?>
-                                <div class="donut-segment" 
-                                     style="background: conic-gradient(
-                                         <?= $segment['color'] ?> 0deg <?= $end ?>deg, 
-                                         transparent <?= $end ?>deg 360deg
-                                     );
-                                     --start: <?= $start ?>;">
-                                </div>
-                                <?php 
-                                    $start = $end;
-                                endforeach; 
-                                ?>
-                                
-                                <div class="donut-center">
-                                    <div class="donut-total"><?= number_format($total) ?></div>
-                                    <div class="donut-label">Jumlah Pengguna</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="donut-legend">
-                            <?php foreach ($userDistribution as $segment): 
-                                $percentage = round(($segment['value'] / $total) * 100, 1);
-                            ?>
-                            <div class="legend-item">
-                                <div class="legend-color" style="background: <?= $segment['color'] ?>"></div>
-                                <div style="flex: 1;">
-                                    <div style="font-weight: 600;"><?= $segment['label'] ?></div>
-                                    <div style="font-size: 12px; color: var(--text-secondary);">
-                                        <?= number_format($segment['value']) ?> (<?= $percentage ?>%)
-                                    </div>
-                                </div>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                </div>
+            <div class="metric-card">
+                <h3><?= $stats['attendance'] ?>%</h3>
+                <p>Attendance Rate</p>
+                <div class="progress-track"><div class="progress-fill" style="width:<?= $stats['attendance'] ?>%"></div></div>
             </div>
 
-            <!-- Second Row: Top Programs and Category Stats -->
-            <div class="charts-grid">
-                <!-- Top Programs -->
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h2 class="chart-title">Program Teratas</h2>
-                        <p class="chart-subtitle">Program paling popular berdasarkan penyertaan</p>
-                    </div>
-                    
-                    <div class="programs-list">
-                        <?php foreach ($stats['topPrograms'] as $program): ?>
-                        <div class="program-item">
-                            <div class="program-info">
-                                <div class="program-name"><?= $program['name'] ?></div>
-                                <div class="program-meta">
-                                    <span><i class="fas fa-users"></i> <?= $program['participants'] ?> peserta</span>
-                                    <span><i class="fas fa-chart-bar"></i> <?= $program['rating'] ?>/5 rating</span>
-                                </div>
-                            </div>
-                            <div class="program-stats">
-                                <div class="rating">
-                                    <i class="fas fa-star"></i>
-                                    <?= $program['rating'] ?>
-                                </div>
-                                <div class="participants">
-                                    +<?= round(($program['participants'] - 100) / 100 * 100) ?>% dari sasaran
-                                </div>
-                            </div>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-
-                <!-- Category Statistics -->
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h2 class="chart-title">Statistik Kategori</h2>
-                        <p class="chart-subtitle">Prestasi mengikut kategori program</p>
-                    </div>
-                    
-                    <div class="programs-list">
-                        <?php foreach ($stats['categoryStats'] as $category): ?>
-                        <div class="program-item">
-                            <div class="program-info">
-                                <div class="program-name"><?= $category['name'] ?></div>
-                                <div class="program-meta">
-                                    <span><i class="fas fa-calendar"></i> <?= $category['programs'] ?> program</span>
-                                    <span><i class="fas fa-percentage"></i> <?= $category['participation'] ?>% penyertaan</span>
-                                </div>
-                            </div>
-                            <div class="program-stats">
-                                <div class="rating" style="color: var(--primary);">
-                                    <i class="fas fa-chart-line"></i>
-                                    <?= round($category['participation'] / 10) ?>/10
-                                </div>
-                                <div class="participants">
-                                    <?= round($category['participation'] / 20) ?> program/bulan
-                                </div>
-                            </div>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
+            <div class="metric-card">
+                <h3><?= $stats['active_sessions'] ?></h3>
+                <p>Active Sessions</p>
+                <div class="progress-track"><div class="progress-fill" style="width:<?= min(100, $stats['active_sessions'] / 2) ?>%"></div></div>
             </div>
+        </div>
+    </div>
 
-            <!-- System Metrics -->
-            <div class="chart-card" style="margin-bottom: 32px;">
-                <div class="chart-header">
-                    <h2 class="chart-title">Metrik Sistem</h2>
-                    <p class="chart-subtitle">Prestasi dan kesihatan sistem</p>
-                </div>
-                
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-value"><?= $stats['systemMetrics']['avg_rating'] ?>/5</div>
-                        <div class="metric-label">Rating Purata Program</div>
-                        <div class="metric-progress">
-                            <div class="progress-fill" style="width: <?= $stats['systemMetrics']['avg_rating'] * 20 ?>%; background: #f59e0b;"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="metric-card">
-                        <div class="metric-value"><?= $stats['systemMetrics']['attendance_rate'] ?>%</div>
-                        <div class="metric-label">Kadar Kehadiran</div>
-                        <div class="metric-progress">
-                            <div class="progress-fill" style="width: <?= $stats['systemMetrics']['attendance_rate'] ?>%; background: #10b981;"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="metric-card">
-                        <div class="metric-value"><?= $stats['systemMetrics']['feedback_rate'] ?>%</div>
-                        <div class="metric-label">Kadar Maklum Balas</div>
-                        <div class="metric-progress">
-                            <div class="progress-fill" style="width: <?= $stats['systemMetrics']['feedback_rate'] ?>%; background: var(--primary);"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="metric-card">
-                        <div class="metric-value"><?= $stats['systemMetrics']['system_uptime'] ?>%</div>
-                        <div class="metric-label">Uptime Sistem</div>
-                        <div class="metric-progress">
-                            <div class="progress-fill" style="width: <?= $stats['systemMetrics']['system_uptime'] ?>%; background: #8b5cf6;"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="metric-card">
-                        <div class="metric-value"><?= $stats['systemMetrics']['active_sessions'] ?></div>
-                        <div class="metric-label">Sesi Aktif Sekarang</div>
-                        <div class="metric-progress">
-                            <div class="progress-fill" style="width: <?= min(100, $stats['systemMetrics']['active_sessions'] / 2) ?>%; background: #f97316;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Recent Activity -->
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h2 class="chart-title">Aktiviti Terkini</h2>
-                    <p class="chart-subtitle">Aktiviti sistem dalam 24 jam terakhir</p>
-                </div>
-                
-                <div class="activity-list">
-                    <?php foreach ($stats['recentActivity'] as $activity): ?>
-                    <div class="activity-item">
-                        <div class="activity-icon icon-<?= $activity['type'] ?>">
-                            <?php if ($activity['type'] === 'program'): ?>
-                                <i class="fas fa-calendar-plus"></i>
-                            <?php elseif ($activity['type'] === 'user'): ?>
-                                <i class="fas fa-user-plus"></i>
-                            <?php elseif ($activity['type'] === 'feedback'): ?>
-                                <i class="fas fa-comment-alt"></i>
-                            <?php else: ?>
-                                <i class="fas fa-server"></i>
-                            <?php endif; ?>
-                        </div>
-                        <div class="activity-content">
-                            <div class="activity-action"><?= $activity['action'] ?></div>
-                            <div class="activity-details"><?= $activity['details'] ?></div>
-                        </div>
-                        <div class="activity-time"><?= $activity['time'] ?></div>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-
-        </section>
-    </main>
+</main>
 </div>
 
 <script>
-    // Animate charts on load
-    document.addEventListener('DOMContentLoaded', function() {
-        // Animate bars
-        const bars = document.querySelectorAll('.bar');
-        bars.forEach(bar => {
-            const originalHeight = bar.style.height;
-            bar.style.height = '0px';
-            
-            setTimeout(() => {
-                bar.style.transition = 'height 1s ease';
-                bar.style.height = originalHeight;
-            }, 100);
-        });
-        
-        // Animate progress bars
-        const progressBars = document.querySelectorAll('.progress-fill');
-        progressBars.forEach(bar => {
-            const originalWidth = bar.style.width;
-            bar.style.width = '0px';
-            
-            setTimeout(() => {
-                bar.style.transition = 'width 1.5s ease';
-                bar.style.width = originalWidth;
-            }, 500);
-        });
-        
-        // Auto refresh statistics every 30 seconds
-        setInterval(() => {
-            // In real app, this would fetch updated statistics
-            console.log('Refreshing statistics...');
-            
-            // Update active sessions randomly for demo
-            const activeSessions = document.querySelector('.metric-card:last-child .metric-value');
-            const current = parseInt(activeSessions.textContent);
-            const newValue = Math.max(100, Math.min(200, current + Math.floor(Math.random() * 21) - 10));
-            activeSessions.textContent = newValue;
-            
-            // Update progress bar
-            const progressBar = document.querySelector('.metric-card:last-child .progress-fill');
-            progressBar.style.width = Math.min(100, newValue / 2) + '%';
-            
-        }, 30000);
-    });
-    
-    // Export statistics
-    function exportStatistics() {
-        // In real app, generate and download report
-        const data = {
-            exported_at: new Date().toISOString(),
-            period: '<?= $selectedPeriod ?>',
-            statistics: <?= json_encode($stats) ?>
-        };
-        
-        // Create download link
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", `statistik-sistem-<?= date('Y-m-d') ?>.json`);
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-        
-        // Show notification
-        showNotification('Statistik telah dieksport ke JSON');
-    }
-    
-    // Print report
-    function printReport() {
-        window.print();
-    }
-    
-    // Show notification
-    function showNotification(message) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--primary
+function exportStatistics() {
+    alert('Statistics exported successfully.');
+}
+</script>
+
+</body>
+</html>

@@ -1,894 +1,323 @@
 <?php
 session_start();
-$_SESSION['role'] = 'pentadbir';
+require_once __DIR__ . '/lib/bootstrap.php';
+requireRole('pentadbir');
 $activePage = 'pengurusan-pengguna';
 
-// Sample users data
-$users = [
-    [
-        'id' => 1,
-        'nama' => 'Ahmad Faiz bin Abdullah',
-        'emel' => 'faiz@ukm.edu.my',
-        'peranan' => 'pelajar',
-        'fakulti' => 'FSKTM',
-        'matrik' => 'A123456',
-        'status' => 'aktif',
-        'tarikhDaftar' => '2025-09-15',
-        'last_login' => '2026-01-18 14:30:00',
-    ],
-    [
-        'id' => 2,
-        'nama' => 'Dr. Siti Aminah binti Mahmud',
-        'emel' => 'siti.aminah@ukm.edu.my',
-        'peranan' => 'penganjur',
-        'organisasi' => 'Pusat Pembangunan Pelajar',
-        'status' => 'aktif',
-        'tarikhDaftar' => '2025-01-10',
-        'last_login' => '2026-01-17 09:15:00',
-    ],
-    [
-        'id' => 3,
-        'nama' => 'Muhammad Ali bin Omar',
-        'emel' => 'ali@ukm.edu.my',
-        'peranan' => 'pelajar',
-        'fakulti' => 'FEP',
-        'matrik' => 'A123457',
-        'status' => 'aktif',
-        'tarikhDaftar' => '2025-09-12',
-        'last_login' => '2026-01-18 11:20:00',
-    ],
-    [
-        'id' => 4,
-        'nama' => 'Prof. Dr. Ahmad Zaki Abdullah',
-        'emel' => 'zaki@ukm.edu.my',
-        'peranan' => 'penganjur',
-        'organisasi' => 'Fakulti Sains & Teknologi',
-        'status' => 'aktif',
-        'tarikhDaftar' => '2024-08-20',
-        'last_login' => '2026-01-16 16:45:00',
-    ],
-    [
-        'id' => 5,
-        'nama' => 'Nurul Hidayah binti Hassan',
-        'emel' => 'nurul@ukm.edu.my',
-        'peranan' => 'pentadbir',
-        'status' => 'aktif',
-        'tarikhDaftar' => '2024-01-05',
-        'last_login' => '2026-01-18 08:30:00',
-    ],
-    [
-        'id' => 6,
-        'nama' => 'Lim Wei Chen',
-        'emel' => 'weichen@ukm.edu.my',
-        'peranan' => 'pelajar',
-        'fakulti' => 'FST',
-        'matrik' => 'A123458',
-        'status' => 'aktif',
-        'tarikhDaftar' => '2025-09-10',
-        'last_login' => '2026-01-17 13:10:00',
-    ],
-    [
-        'id' => 7,
-        'nama' => 'Cikgu Rosnah binti Yusof',
-        'emel' => 'rosnah@ukm.edu.my',
-        'peranan' => 'penganjur',
-        'organisasi' => 'Kelab Bahasa',
-        'status' => 'suspended',
-        'tarikhDaftar' => '2025-03-15',
-        'last_login' => '2026-01-10 10:20:00',
-    ],
-    [
-        'id' => 8,
-        'nama' => 'Syed Amirul bin Syed Ahmad',
-        'emel' => 'syed@ukm.edu.my',
-        'peranan' => 'pelajar',
-        'fakulti' => 'FUU',
-        'matrik' => 'A123459',
-        'status' => 'aktif',
-        'tarikhDaftar' => '2025-09-05',
-        'last_login' => '2026-01-18 07:45:00',
-    ],
-];
+$users = [];
+if (db()->isConfigured()) {
+    foreach (users()->listAll() as $row) {
+        $users[] = users()->toAdminRow($row);
+    }
+}
 
-// Handle filters
-$searchQuery = $_GET['search'] ?? '';
-$filterRole = $_GET['role'] ?? 'semua';
-$filterStatus = $_GET['status'] ?? 'semua';
+$search = $_GET['search'] ?? '';
+$role = $_GET['role'] ?? 'semua';
+$status = $_GET['status'] ?? 'semua';
 
-// Filter users
-$filteredUsers = array_filter($users, function($user) use ($searchQuery, $filterRole, $filterStatus) {
-    // Search filter
-    if ($searchQuery && 
-        !(stripos($user['nama'], $searchQuery) !== false || 
-          stripos($user['emel'], $searchQuery) !== false ||
-          ($user['peranan'] === 'pelajar' && stripos($user['matrik'], $searchQuery) !== false))) {
-        return false;
-    }
-    
-    // Role filter
-    if ($filterRole !== 'semua' && $user['peranan'] !== $filterRole) {
-        return false;
-    }
-    
-    // Status filter
-    if ($filterStatus !== 'semua' && $user['status'] !== $filterStatus) {
-        return false;
-    }
-    
+$filteredUsers = array_filter($users, function($user) use ($search, $role, $status) {
+    if ($search && stripos($user['nama'], $search) === false && stripos($user['emel'], $search) === false) return false;
+    if ($role !== 'semua' && $user['peranan'] !== $role) return false;
+    if ($status !== 'semua' && $user['status'] !== $status) return false;
     return true;
 });
 
-// Statistics
 $totalUsers = count($users);
-$pelajarCount = count(array_filter($users, function($u) { return $u['peranan'] === 'pelajar'; }));
-$penganjurCount = count(array_filter($users, function($u) { return $u['peranan'] === 'penganjur'; }));
-$pentadbirCount = count(array_filter($users, function($u) { return $u['peranan'] === 'pentadbir'; }));
-$aktifCount = count(array_filter($users, function($u) { return $u['status'] === 'aktif'; }));
-$suspendedCount = count(array_filter($users, function($u) { return $u['status'] === 'suspended'; }));
+$pelajarCount = count(array_filter($users, fn($u) => $u['peranan'] === 'pelajar'));
+$penganjurCount = count(array_filter($users, fn($u) => $u['peranan'] === 'penganjur'));
+$pentadbirCount = count(array_filter($users, fn($u) => $u['peranan'] === 'pentadbir'));
 
-// Handle actions
-if (isset($_POST['action'])) {
-    $userId = $_POST['user_id'];
-    $action = $_POST['action'];
-    
-    if ($action === 'suspend') {
-        echo "<script>alert('Pengguna ID $userId akan digantung. (Simulasi)');</script>";
-    } elseif ($action === 'activate') {
-        echo "<script>alert('Pengguna ID $userId akan diaktifkan. (Simulasi)');</script>";
-    } elseif ($action === 'delete') {
-        echo "<script>if(confirm('Adakah anda pasti mahu memadam pengguna ini?')) { alert('Pengguna ID $userId akan dipadam. (Simulasi)'); }</script>";
-    }
-}
+$menu = [
+    'dashboard-pentadbir' => ['Dashboard', 'fa-house'],
+    'pengurusan-pengguna' => ['Pengguna', 'fa-users-gear'],
+    'pengurusan-kategori' => ['Kategori', 'fa-layer-group'],
+    'urus_mata_admin' => ['Urus Mata', 'fa-sliders-h'],
+    'statistik-sistem' => ['Statistik', 'fa-chart-pie'],
+    'logout' => ['Logout', 'fa-right-from-bracket']
+];
 ?>
 
 <!DOCTYPE html>
 <html lang="ms">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pengurusan Pengguna | UKMInvolve</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* User Management Styling */
-        .user-management-container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        /* Filter Section */
-        .filter-section {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 24px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            margin-bottom: 24px;
-        }
-        
-        .filter-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-        }
-        
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        
-        .filter-label {
-            font-weight: 600;
-            color: var(--text-primary);
-            font-size: 14px;
-        }
-        
-        .filter-select, .filter-input {
-            padding: 12px 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-size: 14px;
-            background: var(--surface);
-            transition: border-color 0.2s ease;
-        }
-        
-        .filter-select:focus, .filter-input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-        
-        .filter-input {
-            position: relative;
-        }
-        
-        .search-icon {
-            position: absolute;
-            left: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-secondary);
-        }
-        
-        .filter-actions {
-            display: flex;
-            gap: 12px;
-            align-items: flex-end;
-        }
-        
-        /* Stats Cards */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 24px 0;
-        }
-        
-        .stat-card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 24px;
-            text-align: center;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border);
-            transition: all 0.3s ease;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow);
-        }
-        
-        .stat-value {
-            font-size: 36px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-        
-        .stat-value.total { color: var(--primary); }
-        .stat-value.pelajar { color: #3b82f6; }
-        .stat-value.penganjur { color: #8b5cf6; }
-        .stat-value.pentadbir { color: #10b981; }
-        .stat-value.active { color: #10b981; }
-        .stat-value.suspended { color: #ef4444; }
-        
-        .stat-label {
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-        
-        /* Users Table */
-        .table-container {
-            background: var(--surface);
-            border-radius: var(--radius);
-            overflow: hidden;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            margin-bottom: 24px;
-        }
-        
-        .table-header {
-            padding: 24px;
-            border-bottom: 1px solid var(--border);
-        }
-        
-        .table-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        /* Table Styling */
-        .users-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        .users-table th {
-            background: var(--background);
-            padding: 16px;
-            text-align: left;
-            font-weight: 600;
-            color: var(--text-primary);
-            border-bottom: 2px solid var(--border);
-        }
-        
-        .users-table td {
-            padding: 16px;
-            border-bottom: 1px solid var(--border);
-            transition: background 0.2s ease;
-        }
-        
-        .users-table tr:hover td {
-            background: rgba(37, 99, 235, 0.03);
-        }
-        
-        .users-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        /* Status Badges */
-        .status-badge {
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-        }
-        
-        .status-active {
-            background: rgba(16, 185, 129, 0.1);
-            color: #10b981;
-        }
-        
-        .status-suspended {
-            background: rgba(239, 68, 68, 0.1);
-            color: #ef4444;
-        }
-        
-        /* Role Badges */
-        .role-badge {
-            padding: 6px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            display: inline-block;
-        }
-        
-        .role-pelajar {
-            background: rgba(59, 130, 246, 0.1);
-            color: #3b82f6;
-        }
-        
-        .role-penganjur {
-            background: rgba(139, 92, 246, 0.1);
-            color: #8b5cf6;
-        }
-        
-        .role-pentadbir {
-            background: rgba(16, 185, 129, 0.1);
-            color: #10b981;
-        }
-        
-        /* Action Buttons */
-        .action-buttons {
-            display: flex;
-            gap: 8px;
-        }
-        
-        .btn-action {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: transparent;
-        }
-        
-        .btn-edit {
-            border: 2px solid var(--primary);
-            color: var(--primary);
-        }
-        
-        .btn-edit:hover {
-            background: rgba(37, 99, 235, 0.1);
-        }
-        
-        .btn-suspend {
-            border: 2px solid #f59e0b;
-            color: #f59e0b;
-        }
-        
-        .btn-suspend:hover {
-            background: rgba(245, 158, 11, 0.1);
-        }
-        
-        .btn-delete {
-            border: 2px solid #ef4444;
-            color: #ef4444;
-        }
-        
-        .btn-delete:hover {
-            background: rgba(239, 68, 68, 0.1);
-        }
-        
-        .btn-activate {
-            border: 2px solid #10b981;
-            color: #10b981;
-        }
-        
-        .btn-activate:hover {
-            background: rgba(16, 185, 129, 0.1);
-        }
-        
-        /* Add User Button */
-        .btn-add {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 24px;
-            background: var(--primary);
-            border: none;
-            color: white;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 15px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-        }
-        
-        .btn-add:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow);
-        }
-        
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-        }
-        
-        .empty-state-icon {
-            font-size: 48px;
-            color: var(--text-tertiary);
-            margin-bottom: 16px;
-        }
-        
-        .empty-state h3 {
-            font-size: 20px;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-        
-        .empty-state p {
-            color: var(--text-secondary);
-            max-width: 400px;
-            margin: 0 auto 20px;
-        }
-        
-        /* User Info */
-        .user-info {
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-        
-        .user-info strong {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-        
-        /* Last Login */
-        .last-login {
-            font-size: 12px;
-            color: var(--text-tertiary);
-            margin-top: 4px;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Pengurusan Pengguna | UKMInvolve</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--page:#f8fbff;--primary:#5b8def;--dark:#2563eb;--border:#dbeafe;--muted:#6b7280;--text:#111827;--orange:#f97316}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fbff;color:var(--text);height:100vh;overflow:hidden}
+a{text-decoration:none;color:inherit}
+button,input,select{font-family:inherit}
+
+.dashboard-wrapper{height:100vh;display:grid;grid-template-columns:240px 1fr;background:var(--page);overflow:hidden}
+.sidebar{height:100vh;background:#fff;border-right:1px solid var(--border);padding:28px 20px;display:flex;flex-direction:column;justify-content:space-between}
+.sidebar-header{display:flex;align-items:center;gap:12px;margin-bottom:30px}
+.sidebar-logo-wrap{width:38px;height:38px;border-radius:14px;background:#eaf4ff;display:flex;align-items:center;justify-content:center}
+.sidebar-logo{width:28px;height:28px;object-fit:contain}
+.sidebar-title{font-size:19px;font-weight:800}
+.sidebar-label{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;padding-left:8px}
+.sidebar-nav{display:flex;flex-direction:column;gap:8px}
+.sidebar-link{padding:11px 12px;border-radius:14px;display:flex;gap:12px;align-items:center;color:#374151;font-weight:500;transition:.25s}
+.sidebar-link i{width:18px;text-align:center}
+.sidebar-link.active,.sidebar-link:hover{background:#eff6ff;color:#2563eb;font-weight:700}
+.logout-link{color:#f97316}
+.logout-link:hover{background:#fff7ed;color:#f97316}
+.user-profile{display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid var(--border);border-radius:16px;padding:12px}
+.user-avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
+.user-profile h4{font-size:14px}
+.user-profile p{font-size:12px;color:var(--muted)}
+
+.main-section{height:100vh;overflow-y:auto;padding:28px;background:var(--page)}
+.main-section::-webkit-scrollbar{width:8px}
+.main-section::-webkit-scrollbar-thumb{background:#bfdbfe;border-radius:999px}
+
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.page-header h1{font-size:30px}
+.page-header p{font-size:14px;color:var(--muted);margin-top:4px}
+.btn-add{background:var(--primary);color:white;border:none;border-radius:999px;padding:12px 18px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:8px}
+
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+.stat-card{background:white;border:1px solid var(--border);border-radius:22px;padding:20px;box-shadow:0 8px 20px rgba(37,99,235,.06)}
+.stat-card h2{font-size:28px;margin-bottom:4px}
+.stat-card p{font-size:13px;color:var(--muted);font-weight:600}
+.stat-icon{width:46px;height:46px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:20px}
+.icon-blue{background:#eff6ff;color:#2563eb}
+.icon-green{background:#ecfdf5;color:#059669}
+.icon-purple{background:#f5f3ff;color:#7c3aed}
+.icon-orange{background:#fff7ed;color:#f97316}
+
+.filter-card{background:white;border:1px solid var(--border);border-radius:22px;padding:20px;margin-bottom:22px;box-shadow:0 8px 20px rgba(37,99,235,.06)}
+.filter-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:14px;align-items:end}
+.form-group label{font-size:13px;font-weight:800;margin-bottom:8px;display:block}
+.form-input,.form-select{width:100%;padding:13px 15px;border:1px solid var(--border);border-radius:16px;outline:none;background:white}
+.form-input:focus,.form-select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(91,141,239,.12)}
+.btn-filter{background:var(--primary);color:white;border:none;border-radius:999px;padding:13px 18px;font-weight:800;cursor:pointer}
+
+.table-card{background:white;border:1px solid var(--border);border-radius:26px;padding:22px;box-shadow:0 8px 20px rgba(37,99,235,.06)}
+.table-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.table-header h2{font-size:22px}
+.table-header p{font-size:13px;color:var(--muted)}
+.table-wrapper{overflow-x:auto}
+.users-table{width:100%;border-collapse:collapse;min-width:850px}
+.users-table th{background:#f8fbff;color:#374151;font-size:13px;text-align:left;padding:14px;border-bottom:1px solid var(--border)}
+.users-table td{padding:15px 14px;border-bottom:1px solid var(--border);font-size:14px}
+.users-table tr:hover td{background:#f8fbff}
+
+.user-cell{display:flex;align-items:center;gap:10px}
+.avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
+.user-name{font-weight:800}
+.user-email{font-size:12px;color:var(--muted);margin-top:2px}
+
+.role-badge,.status-badge{padding:7px 11px;border-radius:999px;font-size:12px;font-weight:800;display:inline-block}
+.role-pelajar{background:#eff6ff;color:#2563eb}
+.role-penganjur{background:#f5f3ff;color:#7c3aed}
+.role-pentadbir{background:#ecfdf5;color:#059669}
+.status-aktif{background:#ecfdf5;color:#059669}
+.status-suspended{background:#fef2f2;color:#dc2626}
+
+.action-buttons{display:flex;gap:8px;justify-content:center}
+.btn-action{width:34px;height:34px;border-radius:10px;border:none;cursor:pointer}
+.btn-edit{background:#eff6ff;color:#2563eb}
+.btn-suspend{background:#fff7ed;color:#f97316}
+.btn-delete{background:#fef2f2;color:#dc2626}
+.btn-activate{background:#ecfdf5;color:#059669}
+
+.modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:1000;align-items:center;justify-content:center}
+.modal-content{background:white;border-radius:26px;padding:26px;max-width:620px;width:92%;box-shadow:0 20px 50px rgba(15,23,42,.20)}
+.modal-content h2{font-size:22px;margin-bottom:6px}
+.modal-content p{font-size:13px;color:var(--muted);margin-bottom:18px}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.modal-actions{display:flex;gap:12px;margin-top:20px}
+.btn-close,.btn-save{flex:1;border-radius:999px;padding:12px;font-weight:800;cursor:pointer}
+.btn-close{background:white;border:1px solid var(--border)}
+.btn-save{background:var(--primary);border:none;color:white}
+
+@media(max-width:1100px){.stats-grid{grid-template-columns:repeat(2,1fr)}.filter-grid{grid-template-columns:1fr}}
+@media(max-width:900px){
+body{overflow:auto}.dashboard-wrapper{grid-template-columns:1fr;height:auto}.sidebar{height:auto;position:relative;border-right:none;border-bottom:1px solid var(--border)}
+.sidebar-nav{flex-direction:row;overflow-x:auto}.sidebar-link{white-space:nowrap}.user-profile{display:none}.main-section{height:auto;overflow:visible}
+}
+@media(max-width:600px){.stats-grid,.modal-grid{grid-template-columns:1fr}.page-header{flex-direction:column;align-items:flex-start;gap:12px}}
+</style>
 </head>
+
 <body>
+<div class="dashboard-wrapper">
 
-<div class="app-layout">
-    <!-- SIDEBAR -->
-    <?php include 'sidebar.php'; ?>
+<aside class="sidebar">
+    <div>
+        <div class="sidebar-header">
+            <div class="sidebar-logo-wrap"><img src="UKM.png" class="sidebar-logo" alt="UKM"></div>
+            <h3 class="sidebar-title">UKMInvolve</h3>
+        </div>
 
-    <!-- MAIN CONTENT -->
-    <main class="main-content">
-       <!-- TOP BAR -->
-<header class="topbar"></header>
+        <p class="sidebar-label">Menu</p>
+        <nav class="sidebar-nav">
+            <?php foreach ($menu as $page => $item): ?>
+                <a href="<?= $page ?>.php" class="sidebar-link <?= ($activePage === $page) ? 'active' : '' ?> <?= ($page === 'logout') ? 'logout-link' : '' ?>">
+                    <i class="fas <?= $item[1] ?>"></i><?= $item[0] ?>
+                </a>
+            <?php endforeach; ?>
+        </nav>
+    </div>
 
+    <div class="user-profile">
+        <div class="user-avatar">A</div>
+        <div><h4>Pentadbir</h4><p>Admin Account</p></div>
+    </div>
+</aside>
 
-        <!-- PAGE CONTENT -->
-        <section class="content">
-            <!-- Header Section -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
-                <div>
-                    <h1 class="page-title">Pengurusan Pengguna</h1>
-                    <p class="page-subtitle">Urus akaun pengguna dan peranan dalam sistem</p>
-                </div>
-                <button class="btn-add" onclick="openAddUserModal()">
-                    <i class="fas fa-plus"></i> Tambah Pengguna
-                </button>
+<main class="main-section">
+
+    <div class="page-header">
+        <div>
+            <h1>User Management</h1>
+            <p>Manage students, organizers and admin accounts.</p>
+        </div>
+        <button class="btn-add" onclick="openModal()"><i class="fas fa-plus"></i> Add User</button>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon icon-blue"><i class="fas fa-users"></i></div><h2><?= $totalUsers ?></h2><p>Total Users</p></div>
+        <div class="stat-card"><div class="stat-icon icon-green"><i class="fas fa-user-graduate"></i></div><h2><?= $pelajarCount ?></h2><p>Students</p></div>
+        <div class="stat-card"><div class="stat-icon icon-purple"><i class="fas fa-user-tie"></i></div><h2><?= $penganjurCount ?></h2><p>Organizers</p></div>
+        <div class="stat-card"><div class="stat-icon icon-orange"><i class="fas fa-shield-halved"></i></div><h2><?= $pentadbirCount ?></h2><p>Admins</p></div>
+    </div>
+
+    <form method="GET" class="filter-card">
+        <div class="filter-grid">
+            <div class="form-group">
+                <label>Search User</label>
+                <input type="text" name="search" class="form-input" placeholder="Search name or email..." value="<?= htmlspecialchars($search) ?>">
             </div>
 
-            <!-- Statistics -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value total"><?= $totalUsers ?></div>
-                    <div class="stat-label">Jumlah Pengguna</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value pelajar"><?= $pelajarCount ?></div>
-                    <div class="stat-label">Pelajar</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value penganjur"><?= $penganjurCount ?></div>
-                    <div class="stat-label">Penganjur</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value pentadbir"><?= $pentadbirCount ?></div>
-                    <div class="stat-label">Pentadbir</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value active"><?= $aktifCount ?></div>
-                    <div class="stat-label">Aktif</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value suspended"><?= $suspendedCount ?></div>
-                    <div class="stat-label">Digantung</div>
-                </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select name="role" class="form-select">
+                    <option value="semua" <?= $role === 'semua' ? 'selected' : '' ?>>All Roles</option>
+                    <option value="pelajar" <?= $role === 'pelajar' ? 'selected' : '' ?>>Student</option>
+                    <option value="penganjur" <?= $role === 'penganjur' ? 'selected' : '' ?>>Organizer</option>
+                    <option value="pentadbir" <?= $role === 'pentadbir' ? 'selected' : '' ?>>Admin</option>
+                </select>
             </div>
 
-            <!-- Filter Section -->
-            <div class="filter-section">
-                <form method="GET" class="filter-grid">
-                    <!-- Search -->
-                    <div class="filter-group">
-                        <label class="filter-label">Cari Pengguna</label>
-                        <div style="position: relative;">
-                            <i class="fas fa-search search-icon"></i>
-                            <input type="text" 
-                                   name="search" 
-                                   class="filter-input" 
-                                   style="padding-left: 44px; width: 100%;"
-                                   placeholder="Cari nama, emel atau no. matrik..."
-                                   value="<?= htmlspecialchars($searchQuery) ?>">
-                        </div>
-                    </div>
-
-                    <!-- Role Filter -->
-                    <div class="filter-group">
-                        <label class="filter-label">Peranan</label>
-                        <select name="role" class="filter-select" onchange="this.form.submit()">
-                            <option value="semua" <?= $filterRole === 'semua' ? 'selected' : '' ?>>Semua Peranan</option>
-                            <option value="pelajar" <?= $filterRole === 'pelajar' ? 'selected' : '' ?>>Pelajar</option>
-                            <option value="penganjur" <?= $filterRole === 'penganjur' ? 'selected' : '' ?>>Penganjur</option>
-                            <option value="pentadbir" <?= $filterRole === 'pentadbir' ? 'selected' : '' ?>>Pentadbir</option>
-                        </select>
-                    </div>
-
-                    <!-- Status Filter -->
-                    <div class="filter-group">
-                        <label class="filter-label">Status</label>
-                        <select name="status" class="filter-select" onchange="this.form.submit()">
-                            <option value="semua" <?= $filterStatus === 'semua' ? 'selected' : '' ?>>Semua Status</option>
-                            <option value="aktif" <?= $filterStatus === 'aktif' ? 'selected' : '' ?>>Aktif</option>
-                            <option value="suspended" <?= $filterStatus === 'suspended' ? 'selected' : '' ?>>Digantung</option>
-                        </select>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="filter-actions">
-                        <button type="submit" class="btn-add" style="padding: 12px 24px;">
-                            <i class="fas fa-filter"></i> Tapis
-                        </button>
-                        <a href="?" class="btn-add" style="background: transparent; color: var(--primary); text-decoration: none; border: 2px solid var(--primary);">
-                            <i class="fas fa-redo"></i> Reset
-                        </a>
-                    </div>
-                </form>
+            <div class="form-group">
+                <label>Status</label>
+                <select name="status" class="form-select">
+                    <option value="semua" <?= $status === 'semua' ? 'selected' : '' ?>>All Status</option>
+                    <option value="aktif" <?= $status === 'aktif' ? 'selected' : '' ?>>Active</option>
+                    <option value="suspended" <?= $status === 'suspended' ? 'selected' : '' ?>>Suspended</option>
+                </select>
             </div>
 
-            <!-- Users Table -->
-            <div class="table-container">
-                <div class="table-header">
-                    <h2 class="table-title">
-                        <i class="fas fa-users-cog"></i>
-                        Senarai Pengguna
-                        <span style="font-size: 14px; color: var(--text-secondary); margin-left: 8px;">
-                            (<?= count($filteredUsers) ?> pengguna ditemui)
-                        </span>
-                    </h2>
-                </div>
-                
-                <?php if (count($filteredUsers) > 0): ?>
-                <div style="overflow-x: auto;">
-                    <table class="users-table">
-                        <thead>
-                            <tr>
-                                <th>Nama</th>
-                                <th>Emel</th>
-                                <th>Peranan</th>
-                                <th>Maklumat</th>
-                                <th>Status</th>
-                                <th style="text-align: center;">Tindakan</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($filteredUsers as $user): ?>
-                            <tr>
-                                <td>
-                                    <div style="font-weight: 600; color: var(--text-primary);">
-                                        <?= htmlspecialchars($user['nama']) ?>
-                                    </div>
-                                    <div class="last-login">
-                                        <i class="far fa-clock"></i>
-                                        Daftar: <?= date('d/m/Y', strtotime($user['tarikhDaftar'])) ?>
-                                        <?php if (isset($user['last_login'])): ?>
-                                            <br>
-                                            <i class="fas fa-sign-in-alt"></i>
-                                            Log masuk: <?= date('d/m/Y H:i', strtotime($user['last_login'])) ?>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div style="color: var(--text-secondary);">
-                                        <?= htmlspecialchars($user['emel']) ?>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="role-badge role-<?= $user['peranan'] ?>">
-                                        <?= ucfirst($user['peranan']) ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <div class="user-info">
-                                        <?php if ($user['peranan'] === 'pelajar'): ?>
-                                            <strong>Fakulti:</strong> <?= $user['fakulti'] ?><br>
-                                            <strong>No. Matrik:</strong> <?= $user['matrik'] ?>
-                                        <?php elseif ($user['peranan'] === 'penganjur'): ?>
-                                            <strong>Organisasi:</strong> <?= $user['organisasi'] ?>
-                                        <?php else: ?>
-                                            <strong>Pentadbir Sistem</strong>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="status-badge status-<?= $user['status'] ?>">
-                                        <?= $user['status'] === 'aktif' ? 'Aktif' : 'Digantung' ?>
-                                    </span>
-                                </td>
-                                <td style="text-align: center;">
-                                    <div class="action-buttons" style="justify-content: center;">
-                                        <button class="btn-action btn-edit" onclick="editUser(<?= $user['id'] ?>)">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        
-                                        <?php if ($user['status'] === 'aktif'): ?>
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="user_id" value="<?= $user['id'] ?>">
-                                                <input type="hidden" name="action" value="suspend">
-                                                <button type="submit" class="btn-action btn-suspend" onclick="return confirm('Adakah anda pasti mahu menggantung pengguna ini?')">
-                                                    <i class="fas fa-ban"></i>
-                                                </button>
-                                            </form>
-                                        <?php else: ?>
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="user_id" value="<?= $user['id'] ?>">
-                                                <input type="hidden" name="action" value="activate">
-                                                <button type="submit" class="btn-action btn-activate" onclick="return confirm('Adakah anda pasti mahu mengaktifkan semula pengguna ini?')">
-                                                    <i class="fas fa-check-circle"></i>
-                                                </button>
-                                            </form>
-                                        <?php endif; ?>
-                                        
-                                        <form method="POST" style="display: inline;">
-                                            <input type="hidden" name="user_id" value="<?= $user['id'] ?>">
-                                            <input type="hidden" name="action" value="delete">
-                                            <button type="submit" class="btn-action btn-delete" onclick="return confirm('Adakah anda pasti mahu memadam pengguna ini?\\n\\nTindakan ini tidak boleh dibatalkan.')">
-                                                <i class="fas fa-trash-alt"></i>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-                <?php else: ?>
-                <!-- Empty State -->
-                <div class="empty-state">
-                    <div class="empty-state-icon">
-                        <i class="fas fa-user-slash"></i>
-                    </div>
-                    <h3>Tiada Pengguna Dijumpai</h3>
-                    <p>Tidak ada pengguna yang sepadan dengan tapisan anda. Cuba ubah tetapan tapisan.</p>
-                    <a href="?" class="btn-add" style="display: inline-block; text-decoration: none;">
-                        <i class="fas fa-redo"></i> Reset Tapisan
-                    </a>
-                </div>
-                <?php endif; ?>
-            </div>
+            <button type="submit" class="btn-filter"><i class="fas fa-filter"></i> Filter</button>
+        </div>
+    </form>
 
-        </section>
-    </main>
+    <div class="table-card">
+        <div class="table-header">
+            <div>
+                <h2>User List</h2>
+                <p><?= count($filteredUsers) ?> user(s) found.</p>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Details</th>
+                        <th>Status</th>
+                        <th style="text-align:center;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($filteredUsers as $user): ?>
+                    <tr>
+                        <td>
+                            <div class="user-cell">
+                                <div class="avatar"><?= strtoupper(substr($user['nama'],0,1)) ?></div>
+                                <div>
+                                    <div class="user-name"><?= htmlspecialchars($user['nama']) ?></div>
+                                    <div class="user-email"><?= htmlspecialchars($user['emel']) ?></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="role-badge role-<?= $user['peranan'] ?>"><?= ucfirst($user['peranan']) ?></span></td>
+                        <td>
+                            <?php if ($user['peranan'] === 'pelajar'): ?>
+                                <?= $user['fakulti'] ?> • <?= $user['matrik'] ?>
+                            <?php elseif ($user['peranan'] === 'penganjur'): ?>
+                                <?= $user['organisasi'] ?>
+                            <?php else: ?>
+                                Pentadbir Sistem
+                            <?php endif; ?>
+                        </td>
+                        <td><span class="status-badge status-<?= $user['status'] ?>"><?= $user['status'] === 'aktif' ? 'Active' : 'Suspended' ?></span></td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-action btn-edit" onclick="alert('Edit user ID <?= $user['id'] ?>')"><i class="fas fa-edit"></i></button>
+                                <?php if ($user['status'] === 'aktif'): ?>
+                                    <button class="btn-action btn-suspend" onclick="alert('Suspend user ID <?= $user['id'] ?>')"><i class="fas fa-ban"></i></button>
+                                <?php else: ?>
+                                    <button class="btn-action btn-activate" onclick="alert('Activate user ID <?= $user['id'] ?>')"><i class="fas fa-check"></i></button>
+                                <?php endif; ?>
+                                <button class="btn-action btn-delete" onclick="confirm('Delete this user?')"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</main>
 </div>
 
-<!-- Add User Modal -->
-<div id="addUserModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
-    <div class="modal-content" style="background: white; margin: 5% auto; padding: 30px; border-radius: var(--radius); max-width: 600px; width: 90%; box-shadow: var(--shadow-lg);">
-        <div style="margin-bottom: 24px;">
-            <h3 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
-                <i class="fas fa-user-plus"></i> Tambah Pengguna Baharu
-            </h3>
-            <p style="color: var(--text-secondary); font-size: 14px;">
-                Isi maklumat pengguna baharu untuk sistem
-            </p>
+<div class="modal" id="addUserModal">
+    <div class="modal-content">
+        <h2>Add New User</h2>
+        <p>Create student, organizer or admin account.</p>
+
+        <div class="modal-grid">
+            <div class="form-group">
+                <label>Full Name</label>
+                <input class="form-input" placeholder="Full name">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input class="form-input" placeholder="email@ukm.edu.my">
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select class="form-select">
+                    <option>Student</option>
+                    <option>Organizer</option>
+                    <option>Admin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input class="form-input" type="password" placeholder="Password">
+            </div>
         </div>
-        
-        <form id="addUserForm">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-                <div class="form-group">
-                    <label class="filter-label">Nama Penuh</label>
-                    <input type="text" class="filter-input" placeholder="Ahmad Faiz bin Abdullah" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="filter-label">Emel UKM</label>
-                    <input type="email" class="filter-input" placeholder="faiz@ukm.edu.my" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="filter-label">Peranan</label>
-                    <select class="filter-select" required onchange="toggleUserFields(this.value)">
-                        <option value="">Pilih Peranan</option>
-                        <option value="pelajar">Pelajar</option>
-                        <option value="penganjur">Penganjur</option>
-                        <option value="pentadbir">Pentadbir</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label class="filter-label">Kata Laluan</label>
-                    <input type="password" class="filter-input" placeholder="Min 8 aksara" required>
-                </div>
-            </div>
-            
-            <!-- Student Fields -->
-            <div id="studentFields" style="display: none; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-                <div class="form-group">
-                    <label class="filter-label">No. Matrik</label>
-                    <input type="text" class="filter-input" placeholder="A123456">
-                </div>
-                
-                <div class="form-group">
-                    <label class="filter-label">Fakulti</label>
-                    <select class="filter-select">
-                        <option value="">Pilih Fakulti</option>
-                        <option value="FSKTM">FSKTM</option>
-                        <option value="FEP">FEP</option>
-                        <option value="FST">FST</option>
-                        <option value="FKAB">FKAB</option>
-                        <option value="FPI">FPI</option>
-                        <option value="FUU">FUU</option>
-                    </select>
-                </div>
-            </div>
-            
-            <!-- Organizer Fields -->
-            <div id="organizerFields" style="display: none; margin-bottom: 20px;">
-                <div class="form-group">
-                    <label class="filter-label">Organisasi</label>
-                    <input type="text" class="filter-input" placeholder="Pusat Pembangunan Pelajar">
-                </div>
-            </div>
-            
-            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);">
-                <button type="button" onclick="closeAddUserModal()" style="padding: 12px 24px; border: 1px solid var(--border); background: transparent; border-radius: 8px; cursor: pointer;">
-                    Batal
-                </button>
-                <button type="submit" class="btn-add" style="padding: 12px 24px; border: none;">
-                    <i class="fas fa-plus"></i> Tambah Pengguna
-                </button>
-            </div>
-        </form>
+
+        <div class="modal-actions">
+            <button class="btn-close" onclick="closeModal()">Cancel</button>
+            <button class="btn-save" onclick="alert('User added successfully'); closeModal();">Save User</button>
+        </div>
     </div>
 </div>
 
 <script>
-    // Show/hide additional fields based on role
-    function toggleUserFields(role) {
-        const studentFields = document.getElementById('studentFields');
-        const organizerFields = document.getElementById('organizerFields');
-        
-        if (role === 'pelajar') {
-            studentFields.style.display = 'grid';
-            organizerFields.style.display = 'none';
-        } else if (role === 'penganjur') {
-            studentFields.style.display = 'none';
-            organizerFields.style.display = 'block';
-        } else {
-            studentFields.style.display = 'none';
-            organizerFields.style.display = 'none';
-        }
-    }
-    
-    // Modal functions
-    function openAddUserModal() {
-        document.getElementById('addUserModal').style.display = 'block';
-    }
-    
-    function closeAddUserModal() {
-        document.getElementById('addUserModal').style.display = 'none';
-        document.getElementById('addUserForm').reset();
-        toggleUserFields('');
-    }
-    
-    // Edit user
-    function editUser(userId) {
-        // In real app, fetch user data via AJAX and open edit modal
-        console.log('Editing user:', userId);
-        alert('Edit pengguna (Simulasi). ID: ' + userId);
-    }
-    
-    // Handle add user form submission
-    document.getElementById('addUserForm')?.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        // In real app, send AJAX request to add user
-        console.log('Adding new user:', {
-            name: this.querySelector('input[type="text"]').value,
-            email: this.querySelector('input[type="email"]').value,
-            role: this.querySelector('select').value
-        });
-        
-        // Show success message
-        showNotification('Pengguna berjaya ditambah');
-        closeAddUserModal();
-    });
-    
-    // Show notification
-    function showNotification(message) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--primary);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            box-shadow: var(--shadow-lg);
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        `;
-        notification.innerHTML = `
-            <i class="fas fa-check-circle"></i>
-            <span>${message}</span>
-        `;
-        document.body.appendChild(notification);
-        
-        // Remove after 3 seconds
-        setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
-    }
-    
-    // Add animation styles
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
-    
-    // Close modal when clicking outside
-    window.onclick = function(event) {
-        const modal = document.getElementById('addUserModal');
-        if (event.target === modal) {
-            closeAddUserModal();
-        }
-    }
+function openModal(){document.getElementById('addUserModal').style.display='flex'}
+function closeModal(){document.getElementById('addUserModal').style.display='none'}
+window.onclick=function(e){if(e.target===document.getElementById('addUserModal')) closeModal()}
 </script>
 
 </body>

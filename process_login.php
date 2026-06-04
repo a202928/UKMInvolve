@@ -1,26 +1,37 @@
 <?php
 session_start();
+require_once __DIR__ . '/lib/bootstrap.php';
 
-$email = $_POST['email'] ?? '';
-$password = $_POST['password'] ?? '';
+$emel = strtolower(trim($_POST['emel'] ?? ''));
+$kataLaluan = $_POST['kata_laluan'] ?? '';
 
-if (empty($email) || empty($password)) {
-    $_SESSION['error'] = "Sila isi semua medan";
-    header("Location: login.php");
+if ($emel === '' || $kataLaluan === '') {
+    $_SESSION['error'] = 'Sila isi semua medan';
+    header('Location: login.php');
     exit();
 }
 
-// Tentukan peranan berdasarkan emel (demo)
-if (str_contains($email, 'pentadbir')) {
-    $_SESSION['role'] = 'pentadbir';
-} elseif (str_contains($email, 'penganjur')) {
-    $_SESSION['role'] = 'penganjur';
-} else {
-    $_SESSION['role'] = 'pelajar';
+if (!db()->isConfigured()) {
+    $_SESSION['error'] = Database::getSetupMessage() ?: 'Pangkalan data belum dikonfigurasi.';
+    header('Location: login.php');
+    exit();
 }
 
-$_SESSION['email'] = $email;
+$user = users()->verifyLogin($emel, $kataLaluan);
 
-// Redirect ikut peranan
-header("Location: dashboard.php");
+if (!$user) {
+    $_SESSION['error'] = 'Emel atau kata laluan tidak sah';
+    header('Location: login.php');
+    exit();
+}
+
+if (($user['status'] ?? '') !== 'aktif') {
+    $_SESSION['error'] = 'Akaun anda digantung. Sila hubungi pentadbir.';
+    header('Location: login.php');
+    exit();
+}
+
+loginUser($user);
+
+header('Location: ' . dashboardForRole($user['peranan']));
 exit();

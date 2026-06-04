@@ -1,248 +1,24 @@
 <?php
 session_start();
-$_SESSION['role'] = 'pelajar';
+require_once __DIR__ . '/lib/bootstrap.php';
+requireRole('pelajar');
 $activePage = 'daftar-program';
 
-// Get program ID from URL
-$programId = $_GET['id'] ?? 0;
+$programId = (int) ($_GET['id'] ?? 0);
+$program = null;
 
-// Sample programs data (sama seperti di halaman utama)
-$programs = [
-    1 => [
-        'id' => 1,
-        'title' => 'Workshop Kepimpinan Mahasiswa',
-        'date' => '2026-01-25',
-        'time' => '9:00 AM - 5:00 PM',
-        'location' => 'Dewan Tun Canselor',
-        'category' => 'Kepimpinan',
-        'description' => 'Program latihan kepimpinan intensif untuk mahasiswa. Fokus pada pembangunan kemahiran kepimpinan, kerja berpasukan, dan komunikasi efektif.',
-        'image' => 'program1.jpg',
-        'participants' => 45,
-        'capacity' => 100,
-        'status' => 'available',
-        'rating' => 4.8,
-        'objectives' => [
-            'Membangunkan kemahiran kepimpinan dalam kalangan mahasiswa',
-            'Meningkatkan keyakinan diri dalam pengurusan organisasi',
-            'Memperkukuh kemahiran komunikasi dan penyelesaian masalah'
-        ],
-        'requirements' => [
-            'Mahasiswa aktif UKM',
-            'Minat dalam aktiviti kepimpinan',
-            'Komited untuk menghadiri semua sesi'
-        ],
-        'contact_person' => 'Pn. Noraini (03-89215432)',
-        'deadline' => '2026-01-20',
-        'multiple_sessions' => true,
-        'sessions' => [
-            ['date' => '2026-01-25', 'time' => '9:00 AM - 12:00 PM', 'topic' => 'Pengenalan Kepimpinan'],
-            ['date' => '2026-01-25', 'time' => '2:00 PM - 5:00 PM', 'topic' => 'Kerja Berpasukan'],
-            ['date' => '2026-01-26', 'time' => '9:00 AM - 12:00 PM', 'topic' => 'Komunikasi Efektif']
-        ]
-    ],
-    2 => [
-        'id' => 2,
-        'title' => 'Seminar Inovasi Digital',
-        'date' => '2026-01-28',
-        'time' => '2:00 PM - 5:00 PM',
-        'location' => 'Auditorium FSKTM',
-        'category' => 'Teknologi',
-        'description' => 'Seminar mengenai teknologi digital terkini dan aplikasinya dalam industri. Dikendalikan oleh pakar industri.',
-        'image' => 'program2.jpg',
-        'participants' => 120,
-        'capacity' => 150,
-        'status' => 'available',
-        'rating' => 4.7,
-        'objectives' => [
-            'Mendedahkan peserta kepada teknologi digital terkini',
-            'Memberi pemahaman tentang aplikasi teknologi dalam industri',
-            'Membangunkan minat dalam bidang inovasi digital'
-        ],
-        'requirements' => [
-            'Terbuka kepada semua pelajar UKM',
-            'Minat dalam teknologi dan inovasi',
-            'Laptop sendiri (jika ada)'
-        ],
-        'contact_person' => 'Dr. Ahmad (03-89216677)',
-        'deadline' => '2026-01-26',
-        'multiple_sessions' => false
-    ],
-    3 => [
-        'id' => 3,
-        'title' => 'Program Sukarelawan Komuniti',
-        'date' => '2026-02-02',
-        'time' => '8:00 AM - 12:00 PM',
-        'location' => 'Komuniti Bangi',
-        'category' => 'Komuniti',
-        'description' => 'Program khidmat masyarakat di kawasan setempat. Aktiviti termasuk gotong-royong, bantuan pendidikan dan aktiviti riadah.',
-        'image' => 'program3.jpg',
-        'participants' => 30,
-        'capacity' => 50,
-        'status' => 'available',
-        'rating' => 4.9,
-        'objectives' => [
-            'Memberi khidmat kepada komuniti setempat',
-            'Membangunkan semangat sukarelawan',
-            'Mengukuhkan hubungan universiti-komuniti'
-        ],
-        'requirements' => [
-            'Sihat tubuh badan',
-            'Bersedia untuk kerja fizikal ringan',
-            'Attire: T-shirt dan seluar panjang'
-        ],
-        'contact_person' => 'En. Kamal (03-89218899)',
-        'deadline' => '2026-01-30',
-        'multiple_sessions' => false
-    ],
-    4 => [
-        'id' => 4,
-        'title' => 'Forum Kerjaya Graduan',
-        'date' => '2026-02-15',
-        'time' => '9:00 AM - 1:00 PM',
-        'location' => 'Dewan Kuliah Utama',
-        'category' => 'Kerjaya',
-        'description' => 'Forum berkongsi peluang kerjaya untuk graduan. Dihadiri oleh wakil industri dan alumni yang berjaya.',
-        'image' => 'program4.jpg',
-        'participants' => 85,
-        'capacity' => 200,
-        'status' => 'available',
-        'rating' => 4.6,
-        'objectives' => [
-            'Mendedahkan pelajar kepada peluang kerjaya terkini',
-            'Memberi pendedahan tentang permintaan industri',
-            'Membangunkan jaringan dengan alumni yang berjaya'
-        ],
-        'requirements' => [
-            'Pelajar tahun akhir atau pascasiswazah',
-            'Bersedia untuk sesi soal jawab',
-            'Membawa resume (jika ada)'
-        ],
-        'contact_person' => 'Pn. Sarah (03-89217755)',
-        'deadline' => '2026-02-10',
-        'multiple_sessions' => false
-    ],
-    5 => [
-        'id' => 5,
-        'title' => 'Bengkel Penulisan Ilmiah',
-        'date' => '2026-01-30',
-        'time' => '2:00 PM - 5:00 PM',
-        'location' => 'Perpustakaan',
-        'category' => 'Akademik',
-        'description' => 'Bengkel teknik penulisan akademik yang efektif untuk tesis, artikel jurnal dan kertas kerja.',
-        'image' => 'program1.jpg',
-        'participants' => 25,
-        'capacity' => 30,
-        'status' => 'full',
-        'rating' => 4.5,
-        'objectives' => [
-            'Mengajar teknik penulisan akademik yang betul',
-            'Memperkenalkan alat bantu penulisan',
-            'Meningkatkan kualiti penulisan ilmiah'
-        ],
-        'requirements' => [
-            'Pelajar sarjana atau PhD',
-            'Membawa laptop',
-            'Mempunyai draf penulisan (jika ada)'
-        ],
-        'contact_person' => 'Prof. Dr. Lim (03-89219900)',
-        'deadline' => '2026-01-25',
-        'multiple_sessions' => false
-    ],
-    6 => [
-        'id' => 6,
-        'title' => 'Kem Jati Diri',
-        'date' => '2026-03-05',
-        'time' => '8:00 AM - 6:00 PM',
-        'location' => 'Kem Bina Semangat',
-        'category' => 'Sukan',
-        'description' => 'Kem pembangunan diri dan fizikal melalui aktiviti luar dan cabaran berpasukan.',
-        'image' => 'program3.jpg',
-        'participants' => 40,
-        'capacity' => 40,
-        'status' => 'full',
-        'rating' => 4.4,
-        'objectives' => [
-            'Membangunkan ketahanan mental dan fizikal',
-            'Mengukuhkan semangat berpasukan',
-            'Meningkatkan keyakinan diri'
-        ],
-        'requirements' => [
-            'Sihat tubuh badan',
-            'Bersedia untuk aktiviti lasak',
-            'Pakaian sukan dan kasut yang sesuai'
-        ],
-        'contact_person' => 'En. Rahim (03-89218822)',
-        'deadline' => '2026-02-25',
-        'multiple_sessions' => true,
-        'sessions' => [
-            ['date' => '2026-03-05', 'time' => '8:00 AM - 12:00 PM', 'topic' => 'Ice Breaking & Team Building'],
-            ['date' => '2026-03-05', 'time' => '2:00 PM - 6:00 PM', 'topic' => 'Obstacle Course & Challenges']
-        ]
-    ],
-    7 => [
-        'id' => 7,
-        'title' => 'Workshop Kreativiti & Inovasi',
-        'date' => '2026-02-10',
-        'time' => '10:00 AM - 4:00 PM',
-        'location' => 'Bilik Seminar FEP',
-        'category' => 'Keusahawanan',
-        'description' => 'Bengkel untuk membangunkan idea kreatif dan inovatif dalam perniagaan.',
-        'image' => 'program2.jpg',
-        'participants' => 60,
-        'capacity' => 80,
-        'status' => 'available',
-        'rating' => 4.3,
-        'objectives' => [
-            'Merangsang pemikiran kreatif dan inovatif',
-            'Mengajar teknik penyelesaian masalah kreatif',
-            'Membantu membangunkan idea perniagaan'
-        ],
-        'requirements' => [
-            'Terbuka kepada semua pelajar',
-            'Membawa buku nota dan pen',
-            'Bersedia untuk aktiviti berkumpulan'
-        ],
-        'contact_person' => 'Pn. Aisyah (03-89215566)',
-        'deadline' => '2026-02-05',
-        'multiple_sessions' => false
-    ],
-    8 => [
-        'id' => 8,
-        'title' => 'Program Seni Budaya',
-        'date' => '2026-02-22',
-        'time' => '7:00 PM - 10:00 PM',
-        'location' => 'Dewan Budaya',
-        'category' => 'Seni',
-        'description' => 'Pertunjukan dan bengkel seni tradisional termasuk tarian, muzik dan kraftangan.',
-        'image' => 'program5.jpg',
-        'participants' => 90,
-        'capacity' => 150,
-        'status' => 'available',
-        'rating' => 4.7,
-        'objectives' => [
-            'Memperkenalkan seni budaya tradisional',
-            'Mengekalkan warisan budaya negara',
-            'Membangunkan minat dalam seni persembahan'
-        ],
-        'requirements' => [
-            'Terbuka kepada semua pelajar',
-            'Minat dalam seni dan budaya',
-            'Bersedia untuk berpartisipasi aktif'
-        ],
-        'contact_person' => 'En. Hafiz (03-89214433)',
-        'deadline' => '2026-02-18',
-        'multiple_sessions' => false
-    ]
-];
-
-// Get selected program
-$program = $programs[$programId] ?? null;
+if (db()->isConfigured() && $programId > 0) {
+    $row = programs()->findById($programId);
+    if ($row) {
+        $program = programs()->toStudentDetail($row);
+    }
+}
 
 if (!$program) {
-    // Redirect to main program page if program not found
-    header('Location: daftar-program.php');
+    header('Location: search.php');
     exit();
 }
+
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -265,36 +41,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($alasan)) $errors[] = 'Alasan penyertaan diperlukan';
     
     if (empty($errors)) {
-        // Save registration to session
-        if (!isset($_SESSION['registrations'])) {
-            $_SESSION['registrations'] = [];
+        if (!db()->isConfigured()) {
+            $errors[] = Database::getSetupMessage() ?: 'Pangkalan data belum dikonfigurasi';
+        } elseif ($program['status'] === 'full') {
+            $errors[] = 'Program ini sudah penuh';
+        } else {
+            $regResult = registrations()->create([
+                'program_id' => $programId,
+                'pelajar_id' => $_SESSION['user_id'] ?? null,
+                'nama' => $nama,
+                'no_matrik' => $no_matrik,
+                'fakulti' => $fakulti,
+                'emel' => $email,
+                'telefon' => $telefon,
+                'alasan' => $alasan,
+                'status' => 'pending',
+            ]);
+
+            if ($regResult['ok']) {
+                registrations()->incrementParticipants($programId, (int) $program['participants']);
+                $program['participants']++;
+                $success = true;
+                $successMessage = 'Pendaftaran berjaya! Anda akan menerima email pengesahan dalam masa 24 jam.';
+            } else {
+                $errors[] = 'Pendaftaran gagal: ' . ($regResult['error'] ?? 'Ralat pangkalan data');
+            }
         }
-        
-        $_SESSION['registrations'][] = [
-            'program_id' => $programId,
-            'program_title' => $program['title'],
-            'nama' => $nama,
-            'no_matrik' => $no_matrik,
-            'fakulti' => $fakulti,
-            'email' => $email,
-            'telefon' => $telefon,
-            'alasan' => $alasan,
-            'sesi_dipilih' => $sesi_dipilih,
-            'tarikh_daftar' => date('Y-m-d H:i:s'),
-            'status' => 'pending'
-        ];
-        
-        // Update program participants count in session
-        if (!isset($_SESSION['program_participants'])) {
-            $_SESSION['program_participants'] = [];
-        }
-        if (!isset($_SESSION['program_participants'][$programId])) {
-            $_SESSION['program_participants'][$programId] = $program['participants'];
-        }
-        $_SESSION['program_participants'][$programId]++;
-        
-        $success = true;
-        $successMessage = "Pendaftaran berjaya! Anda akan menerima email pengesahan dalam masa 24 jam.";
     }
 }
 ?>

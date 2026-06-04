@@ -1,927 +1,550 @@
 <?php
 session_start();
-$_SESSION['role'] = 'penganjur';
+require_once __DIR__ . '/lib/bootstrap.php';
+requireRole('penganjur');
 $activePage = 'laporan-statistik';
 
-// Sample data for demonstration
-$programs = [
-    ['id' => 1, 'name' => 'Workshop Kepimpinan Mahasiswa', 'date' => '2026-01-25', 'participants' => 45, 'attendance' => 42, 'rating' => 4.8],
-    ['id' => 2, 'name' => 'Seminar Inovasi Digital', 'date' => '2026-01-28', 'participants' => 120, 'attendance' => 115, 'rating' => 4.7],
-    ['id' => 3, 'name' => 'Program Sukarelawan Komuniti', 'date' => '2026-02-02', 'participants' => 30, 'attendance' => 28, 'rating' => 4.9],
-    ['id' => 4, 'name' => 'Forum Kerjaya Graduan', 'date' => '2026-02-15', 'participants' => 85, 'attendance' => 82, 'rating' => 4.6],
-];
+// Fetch real programs from DB for this organizer
+$rawPrograms = db()->isConfigured() ? programs()->listWithCategory() : [];
 
-// Handle form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $reportType = $_POST['report_type'] ?? 'summary';
-    $programId = $_POST['program_id'] ?? 'all';
-    $dateRange = $_POST['date_range'] ?? 'month';
-    $format = $_POST['format'] ?? 'pdf';
-    
-    // Generate report based on parameters
-    $reportData = generateReport($reportType, $programId, $dateRange);
-    
-    // Simulate download
-    echo "<script>
-        alert('Laporan $reportType sedang dijana dalam format $format...\\n\\nProgram: " . ($programId === 'all' ? 'Semua' : 'Program ID ' . $programId) . "\\nTempoh: $dateRange\\n\\nLaporan berjaya dijana!');
-        showNotification('Laporan berjaya dijana dan sedia dimuat turun');
-    </script>";
-}
+// Filter to only this organizer's programs
+$organizerId = $_SESSION['user_id'] ?? null;
+$rawPrograms = array_filter($rawPrograms, fn($p) => ($p['penganjur_id'] ?? null) === $organizerId);
+$rawPrograms = array_values($rawPrograms);
 
-function generateReport($type, $programId, $dateRange) {
-    // In real app, fetch data from database based on parameters
-    return [
-        'type' => $type,
-        'program_id' => $programId,
-        'date_range' => $dateRange,
-        'generated_at' => date('Y-m-d H:i:s'),
-        'data' => [] // Would contain actual report data
+// Fetch real feedback counts
+$programs = [];
+foreach ($rawPrograms as $row) {
+    $fbResult = db()->select('maklum_balas', '?select=id,rating&program_id=eq.' . (int)$row['id']);
+    $fbRows    = ($fbResult['ok'] && !empty($fbResult['data'])) ? $fbResult['data'] : [];
+    $fbCount   = count($fbRows);
+    $avgRating = $fbCount > 0 ? round(array_sum(array_column($fbRows, 'rating')) / $fbCount, 1) : (float)($row['rating'] ?? 0);
+
+    $programs[] = [
+        'id'          => $row['id'],
+        'name'        => $row['nama'],
+        'participants'=> (int)($row['peserta_semasa'] ?? 0),
+        'attendance'  => (int)($row['peserta_semasa'] ?? 0), // attendance = confirmed registrations
+        'rating'      => $avgRating,
+        'feedback'    => $fbCount,
     ];
 }
 
-// Calculate statistics
 $totalParticipants = array_sum(array_column($programs, 'participants'));
-$totalAttendance = array_sum(array_column($programs, 'attendance'));
-$attendanceRate = round(($totalAttendance / $totalParticipants) * 100, 1);
-$averageRating = round(array_sum(array_column($programs, 'rating')) / count($programs), 1);
+$totalAttendance   = array_sum(array_column($programs, 'attendance'));
+$totalFeedback     = array_sum(array_column($programs, 'feedback'));
+$attendanceRate    = $totalParticipants > 0 ? round(($totalAttendance / $totalParticipants) * 100) : 0;
+$averageRating     = count($programs) > 0 ? round(array_sum(array_column($programs, 'rating')) / count($programs), 1) : 0;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $reportType = $_POST['report_type'] ?? 'attendance';
+    $format = $_POST['format'] ?? 'pdf';
+    echo "<script>alert('Report generated successfully in " . strtoupper($format) . " format.');</script>";
+}
+
+$menu = [
+    'dashboard_penganjur' => ['Dashboard', 'fa-house'],
+    'hebahan-program' => ['Hebahan', 'fa-bullhorn'],
+    'urus-program' => ['Urus Program', 'fa-calendar-check'],
+    'peserta-kehadiran' => ['Peserta', 'fa-users'],
+    'laporan-statistik' => ['Laporan', 'fa-chart-column'],
+    'logout' => ['Logout', 'fa-right-from-bracket']
+];
 ?>
 
 <!DOCTYPE html>
 <html lang="ms">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Menjana Laporan Statistik | UKMInvolve</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* Report Generator Styling */
-        .report-container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-        
-        /* Report Configuration */
-        .config-card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 32px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            margin-bottom: 32px;
-        }
-        
-        .config-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .config-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 24px;
-        }
-        
-        .config-group {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        
-        .config-label {
-            font-weight: 600;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .config-label i {
-            color: var(--primary);
-        }
-        
-        .config-select, .config-input {
-            padding: 14px 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-size: 15px;
-            font-family: inherit;
-            background: var(--surface);
-            transition: all 0.2s ease;
-        }
-        
-        .config-select:focus, .config-input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-        }
-        
-        /* Report Types Grid */
-        .report-types {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-            margin-top: 16px;
-        }
-        
-        .report-type-card {
-            padding: 20px;
-            border: 2px solid var(--border);
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-align: center;
-        }
-        
-        .report-type-card:hover {
-            border-color: var(--primary);
-            background: rgba(37, 99, 235, 0.05);
-            transform: translateY(-2px);
-        }
-        
-        .report-type-card.selected {
-            border-color: var(--primary);
-            background: rgba(37, 99, 235, 0.1);
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
-        }
-        
-        .report-type-icon {
-            font-size: 32px;
-            color: var(--primary);
-            margin-bottom: 12px;
-        }
-        
-        .report-type-title {
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-        }
-        
-        .report-type-desc {
-            font-size: 13px;
-            color: var(--text-secondary);
-            line-height: 1.4;
-        }
-        
-        /* Format Options */
-        .format-options {
-            display: flex;
-            gap: 12px;
-            margin-top: 8px;
-        }
-        
-        .format-option {
-            flex: 1;
-            padding: 12px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .format-option:hover {
-            border-color: var(--primary);
-        }
-        
-        .format-option.selected {
-            border-color: var(--primary);
-            background: rgba(37, 99, 235, 0.1);
-        }
-        
-        .format-icon {
-            font-size: 24px;
-            margin-bottom: 8px;
-        }
-        
-        .format-pdf .format-icon { color: #ef4444; }
-        .format-excel .format-icon { color: #10b981; }
-        .format-csv .format-icon { color: #3b82f6; }
-        
-        /* Preview Section */
-        .preview-section {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 32px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            margin-bottom: 32px;
-        }
-        
-        .preview-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }
-        
-        .preview-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-        
-        /* Preview Content */
-        .preview-content {
-            background: var(--background);
-            border-radius: 8px;
-            padding: 24px;
-            border: 1px solid var(--border);
-        }
-        
-        .preview-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        .preview-table th {
-            background: var(--surface);
-            padding: 12px 16px;
-            text-align: left;
-            font-weight: 600;
-            color: var(--text-primary);
-            border-bottom: 2px solid var(--border);
-        }
-        
-        .preview-table td {
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border);
-        }
-        
-        .preview-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .rating-stars {
-            color: #f59e0b;
-            font-size: 14px;
-        }
-        
-        .attendance-badge {
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        .attendance-high { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-        .attendance-medium { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-        
-        /* Statistics Summary */
-        .stats-summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-top: 24px;
-        }
-        
-        .stat-item {
-            background: var(--surface);
-            border-radius: 8px;
-            padding: 16px;
-            text-align: center;
-            border: 1px solid var(--border);
-        }
-        
-        .stat-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 4px;
-        }
-        
-        .stat-label {
-            font-size: 13px;
-            color: var(--text-secondary);
-        }
-        
-        /* Action Buttons */
-        .action-buttons {
-            display: flex;
-            gap: 16px;
-            margin-top: 32px;
-        }
-        
-        .btn-generate {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 16px;
-            background: var(--primary);
-            border: none;
-            color: white;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .btn-generate:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow);
-        }
-        
-        .btn-preview {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 16px;
-            background: transparent;
-            border: 2px solid var(--primary);
-            color: var(--primary);
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .btn-preview:hover {
-            background: rgba(37, 99, 235, 0.1);
-        }
-        
-        /* Date Range Picker */
-        .date-range-picker {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-        
-        .date-input {
-            flex: 1;
-            padding: 12px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-size: 14px;
-        }
-        
-        /* Custom Date Range */
-        .custom-range {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 12px;
-        }
-        
-        /* Loading Animation */
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        /* Report Tips */
-        .report-tips {
-            background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(139, 92, 246, 0.05));
-            border-radius: var(--radius);
-            padding: 20px;
-            margin-top: 24px;
-            border-left: 4px solid var(--primary);
-        }
-        
-        .tips-title {
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .tips-list {
-            padding-left: 20px;
-            color: var(--text-secondary);
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        
-        .tips-list li {
-            margin-bottom: 8px;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Laporan Statistik | UKMInvolve</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+    --page:#f8fbff;--primary:#5b8def;--dark:#2563eb;--border:#dbeafe;
+    --muted:#6b7280;--text:#111827;--green:#10b981;--orange:#f97316;
+    --purple:#8b5cf6;--red:#ef4444;
+}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fbff;color:var(--text);height:100vh;overflow:hidden}
+a{text-decoration:none;color:inherit}
+button,select,input{font-family:inherit}
+
+.dashboard-wrapper{height:100vh;display:grid;grid-template-columns:240px 1fr;background:var(--page);overflow:hidden}
+
+.sidebar{height:100vh;background:#fff;border-right:1px solid var(--border);padding:28px 20px;display:flex;flex-direction:column;justify-content:space-between}
+.sidebar-header{display:flex;align-items:center;gap:12px;margin-bottom:30px}
+.sidebar-logo-wrap{width:38px;height:38px;border-radius:14px;background:#eaf4ff;display:flex;align-items:center;justify-content:center}
+.sidebar-logo{width:28px;height:28px;object-fit:contain}
+.sidebar-title{font-size:19px;font-weight:800}
+.sidebar-label{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;padding-left:8px}
+.sidebar-nav{display:flex;flex-direction:column;gap:8px}
+.sidebar-link{padding:11px 12px;border-radius:14px;display:flex;gap:12px;align-items:center;color:#374151;font-weight:500;transition:.25s}
+.sidebar-link i{width:18px;text-align:center}
+.sidebar-link.active,.sidebar-link:hover{background:#eff6ff;color:#2563eb;font-weight:700}
+.logout-link{color:#f97316}
+.logout-link:hover{background:#fff7ed;color:#f97316}
+.user-profile{display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid var(--border);border-radius:16px;padding:12px}
+.user-avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
+.user-profile h4{font-size:14px}
+.user-profile p{font-size:12px;color:var(--muted)}
+
+.main-section{height:100vh;overflow-y:auto;padding:28px;background:var(--page)}
+.main-section::-webkit-scrollbar{width:8px}
+.main-section::-webkit-scrollbar-thumb{background:#bfdbfe;border-radius:999px}
+
+.page-header{margin-bottom:22px}
+.page-header h1{font-size:30px}
+.page-header p{font-size:14px;color:var(--muted);margin-top:4px}
+
+.hero-card{
+    background:linear-gradient(135deg,#7bb6ff,#5b8def);
+    color:white;
+    border-radius:26px;
+    padding:26px;
+    margin-bottom:22px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    overflow:hidden;
+    position:relative;
+    box-shadow:0 18px 38px rgba(91,141,239,.20);
+}
+.hero-card::before{
+    content:"";
+    position:absolute;
+    right:-60px;
+    top:-70px;
+    width:230px;
+    height:230px;
+    border-radius:50%;
+    background:rgba(255,255,255,.13);
+}
+.hero-card h2{font-size:28px;margin-bottom:8px;position:relative;z-index:1}
+.hero-card p{font-size:14px;color:#eef6ff;position:relative;z-index:1}
+.hero-icon{width:82px;height:82px;border-radius:24px;background:rgba(255,255,255,.20);display:flex;align-items:center;justify-content:center;font-size:36px;position:relative;z-index:1}
+
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+.stat-card{border-radius:22px;padding:18px;color:white;box-shadow:0 10px 25px rgba(37,99,235,.10);display:flex;justify-content:space-between;align-items:center}
+.stat-card h2{font-size:28px;margin-bottom:4px}
+.stat-card p{font-size:13px;color:rgba(255,255,255,.9)}
+.stat-icon{width:46px;height:46px;border-radius:16px;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:20px}
+.stat-blue{background:linear-gradient(135deg,#60a5fa,#2563eb)}
+.stat-green{background:linear-gradient(135deg,#34d399,#059669)}
+.stat-orange{background:linear-gradient(135deg,#fbbf24,#f97316)}
+.stat-purple{background:linear-gradient(135deg,#a78bfa,#7c3aed)}
+
+.dashboard-grid{display:grid;grid-template-columns:.9fr 1.2fr;gap:22px}
+.card{
+    background:white;
+    border:1px solid var(--border);
+    border-radius:26px;
+    padding:22px;
+    box-shadow:0 8px 20px rgba(37,99,235,.06);
+    margin-bottom:22px;
+}
+.card-title{font-size:22px;font-weight:800;margin-bottom:6px}
+.card-subtitle{font-size:13px;color:var(--muted);margin-bottom:18px}
+
+.report-type-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
+.report-type-card{
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:18px;
+    cursor:pointer;
+    transition:.25s;
+    text-align:center;
+}
+.report-type-card:hover,.report-type-card.selected{
+    border-color:var(--primary);
+    background:#eff6ff;
+    color:var(--dark);
+}
+.report-type-card i{font-size:30px;margin-bottom:10px;color:var(--primary)}
+.report-type-card h3{font-size:16px;margin-bottom:5px}
+.report-type-card p{font-size:12px;color:var(--muted)}
+
+.form-group{margin-bottom:16px}
+.form-group label{font-size:13px;font-weight:800;margin-bottom:8px;display:block}
+.form-select{
+    width:100%;
+    padding:13px 15px;
+    border:1px solid var(--border);
+    border-radius:16px;
+    outline:none;
+    font-size:14px;
+}
+.form-select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(91,141,239,.12)}
+
+.format-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.format-option{
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:14px;
+    text-align:center;
+    cursor:pointer;
+    transition:.25s;
+}
+.format-option i{font-size:24px;margin-bottom:7px;color:var(--primary)}
+.format-option.selected,.format-option:hover{background:#eff6ff;border-color:var(--primary);color:var(--dark);font-weight:800}
+
+.action-row{display:flex;gap:12px;margin-top:18px}
+.btn-preview,.btn-generate{
+    flex:1;
+    border-radius:999px;
+    padding:13px 16px;
+    font-weight:800;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+}
+.btn-preview{background:white;border:1px solid var(--primary);color:var(--primary)}
+.btn-generate{background:var(--primary);border:none;color:white}
+.btn-generate:hover{background:var(--dark)}
+
+.chart-card{min-height:290px}
+.chart-wrapper{height:220px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding-top:35px}
+.chart-item{flex:1;text-align:center}
+.chart-bar{height:100px;border-radius:14px 14px 6px 6px;background:linear-gradient(180deg,#7bb6ff,#2563eb);position:relative}
+.chart-value{position:absolute;top:-26px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:800;color:var(--dark)}
+.chart-label{font-size:11px;color:var(--muted);margin-top:8px}
+
+.preview-table-wrapper{overflow-x:auto}
+.preview-table{width:100%;border-collapse:collapse;min-width:700px}
+.preview-table th{
+    background:#f8fbff;
+    color:#374151;
+    font-size:13px;
+    text-align:left;
+    padding:14px;
+    border-bottom:1px solid var(--border);
+}
+.preview-table td{
+    padding:15px 14px;
+    border-bottom:1px solid var(--border);
+    font-size:14px;
+}
+.preview-table tr:hover td{background:#f8fbff}
+.badge{
+    padding:7px 11px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:800;
+    display:inline-block;
+}
+.badge-green{background:#ecfdf5;color:#059669}
+.badge-orange{background:#fff7ed;color:#f97316}
+.rating{color:#f59e0b;font-weight:800}
+
+@media(max-width:1100px){
+    .stats-grid{grid-template-columns:repeat(2,1fr)}
+    .dashboard-grid{grid-template-columns:1fr}
+}
+@media(max-width:900px){
+    body{overflow:auto}
+    .dashboard-wrapper{grid-template-columns:1fr;height:auto}
+    .sidebar{height:auto;position:relative;border-right:none;border-bottom:1px solid var(--border)}
+    .sidebar-nav{flex-direction:row;overflow-x:auto}
+    .sidebar-link{white-space:nowrap}
+    .user-profile{display:none}
+    .main-section{height:auto;overflow:visible}
+}
+@media(max-width:600px){
+    .stats-grid,.report-type-grid,.format-grid{grid-template-columns:1fr}
+    .hero-card{flex-direction:column;align-items:flex-start;gap:14px}
+    .action-row{flex-direction:column}
+}
+</style>
 </head>
+
 <body>
+<div class="dashboard-wrapper">
 
-<div class="app-layout">
-    <!-- SIDEBAR -->
-    <?php include 'sidebar.php'; ?>
-
-    <!-- MAIN CONTENT -->
-    <main class="main-content">
-       <!-- TOP BAR -->
-<header class="topbar"></header>
-
-
-        <!-- PAGE CONTENT -->
-        <section class="content">
-            <!-- Header Section -->
-            <div class="welcome-section">
-                <h1 class="page-title">Menjana Laporan Statistik</h1>
-                <p class="page-subtitle">Hasilkan laporan statistik untuk program dan analisis prestasi</p>
+<aside class="sidebar">
+    <div>
+        <div class="sidebar-header">
+            <div class="sidebar-logo-wrap">
+                <img src="UKM.png" class="sidebar-logo" alt="UKM">
             </div>
+            <h3 class="sidebar-title">UKMInvolve</h3>
+        </div>
 
-            <!-- Report Configuration -->
-            <form method="POST" class="config-card">
-                <h2 class="config-title">
-                    <i class="fas fa-cog"></i>
-                    Konfigurasi Laporan
-                </h2>
-                
-                <div class="config-grid">
-                    <!-- Report Type -->
-                    <div class="config-group">
-                        <label class="config-label">
-                            <i class="fas fa-chart-bar"></i>
-                            Jenis Laporan
-                        </label>
-                        
-                        <div class="report-types">
-                            <div class="report-type-card selected" onclick="selectReportType('summary')">
-                                <div class="report-type-icon">
-                                    <i class="fas fa-chart-pie"></i>
-                                </div>
-                                <div class="report-type-title">Ringkasan</div>
-                                <div class="report-type-desc">Ringkasan statistik keseluruhan program</div>
-                            </div>
-                            
-                            <div class="report-type-card" onclick="selectReportType('attendance')">
-                                <div class="report-type-icon">
-                                    <i class="fas fa-user-check"></i>
-                                </div>
-                                <div class="report-type-title">Kehadiran</div>
-                                <div class="report-type-desc">Analisis kehadiran peserta</div>
-                            </div>
-                            
-                            <div class="report-type-card" onclick="selectReportType('feedback')">
-                                <div class="report-type-icon">
-                                    <i class="fas fa-comment-alt"></i>
-                                </div>
-                                <div class="report-type-title">Maklum Balas</div>
-                                <div class="report-type-desc">Analisis maklum balas peserta</div>
-                            </div>
-                            
-                            <div class="report-type-card" onclick="selectReportType('detailed')">
-                                <div class="report-type-icon">
-                                    <i class="fas fa-file-alt"></i>
-                                </div>
-                                <div class="report-type-title">Terperinci</div>
-                                <div class="report-type-desc">Laporan lengkap dengan semua data</div>
-                            </div>
+        <p class="sidebar-label">Menu</p>
+        <nav class="sidebar-nav">
+            <?php foreach ($menu as $page => $item): ?>
+                <a href="<?= $page ?>.php"
+                   class="sidebar-link <?= ($activePage === $page) ? 'active' : '' ?> <?= ($page === 'logout') ? 'logout-link' : '' ?>">
+                    <i class="fas <?= $item[1] ?>"></i>
+                    <?= $item[0] ?>
+                </a>
+            <?php endforeach; ?>
+        </nav>
+    </div>
+
+    <div class="user-profile">
+        <div class="user-avatar">P</div>
+        <div>
+            <h4>Penganjur</h4>
+            <p>UKM Account</p>
+        </div>
+    </div>
+</aside>
+
+<main class="main-section">
+
+    <div class="page-header">
+        <h1>Reports & Statistics</h1>
+        <p>Generate attendance and feedback reports for organised programmes.</p>
+    </div>
+
+    <div class="hero-card">
+        <div>
+            <h2>Programme Performance Summary</h2>
+            <p>Monitor attendance, feedback and overall engagement in one place.</p>
+        </div>
+        <div class="hero-icon">
+            <i class="fas fa-chart-column"></i>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card stat-blue">
+            <div>
+                <h2><?= $totalParticipants ?></h2>
+                <p>Total Participants</p>
+            </div>
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+        </div>
+
+        <div class="stat-card stat-green">
+            <div>
+                <h2><?= $attendanceRate ?>%</h2>
+                <p>Attendance Rate</p>
+            </div>
+            <div class="stat-icon"><i class="fas fa-user-check"></i></div>
+        </div>
+
+        <div class="stat-card stat-orange">
+            <div>
+                <h2><?= $totalFeedback ?></h2>
+                <p>Total Feedback</p>
+            </div>
+            <div class="stat-icon"><i class="fas fa-comment-dots"></i></div>
+        </div>
+
+        <div class="stat-card stat-purple">
+            <div>
+                <h2><?= $averageRating ?>/5</h2>
+                <p>Average Rating</p>
+            </div>
+            <div class="stat-icon"><i class="fas fa-star"></i></div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+
+        <div>
+            <form method="POST" class="card">
+                <h2 class="card-title">Report Configuration</h2>
+                <p class="card-subtitle">Choose report type, programme and output format.</p>
+
+                <div class="report-type-grid">
+                    <div class="report-type-card selected" onclick="selectReportType(this, 'attendance')">
+                        <i class="fas fa-user-check"></i>
+                        <h3>Attendance</h3>
+                        <p>Analyse participant attendance.</p>
+                    </div>
+
+                    <div class="report-type-card" onclick="selectReportType(this, 'feedback')">
+                        <i class="fas fa-comment-alt"></i>
+                        <h3>Feedback</h3>
+                        <p>Analyse participant feedback.</p>
+                    </div>
+                </div>
+
+                <input type="hidden" name="report_type" id="reportType" value="attendance">
+
+                <div class="form-group">
+                    <label>Programme</label>
+                    <select name="program_id" class="form-select" id="programSelect">
+                        <option value="all">All Programmes</option>
+                        <?php foreach ($programs as $program): ?>
+                            <option value="<?= $program['id'] ?>"><?= htmlspecialchars($program['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Output Format</label>
+                    <div class="format-grid">
+                        <div class="format-option selected" onclick="selectFormat(this, 'pdf')">
+                            <i class="fas fa-file-pdf"></i>
+                            <div>PDF</div>
                         </div>
-                        
-                        <input type="hidden" name="report_type" id="reportType" value="summary">
-                    </div>
 
-                    <!-- Program Selection -->
-                    <div class="config-group">
-                        <label class="config-label">
-                            <i class="fas fa-calendar-alt"></i>
-                            Pilih Program
-                        </label>
-                        <select name="program_id" class="config-select" id="programSelect">
-                            <option value="all">Semua Program</option>
-                            <?php foreach ($programs as $program): ?>
-                                <option value="<?= $program['id'] ?>"><?= htmlspecialchars($program['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+                        <div class="format-option" onclick="selectFormat(this, 'excel')">
+                            <i class="fas fa-file-excel"></i>
+                            <div>Excel</div>
+                        </div>
 
-                    <!-- Date Range -->
-                    <div class="config-group">
-                        <label class="config-label">
-                            <i class="fas fa-calendar"></i>
-                            Tempoh Masa
-                        </label>
-                        <select name="date_range" class="config-select" id="dateRange" onchange="toggleCustomDateRange()">
-                            <option value="week">Minggu Ini</option>
-                            <option value="month">Bulan Ini</option>
-                            <option value="quarter">Suku Tahun Ini</option>
-                            <option value="year">Tahun Ini</option>
-                            <option value="custom">Julat Tersuai</option>
-                            <option value="all">Semua Masa</option>
-                        </select>
-                        
-                        <!-- Custom Date Range -->
-                        <div id="customDateRange" style="display: none;" class="custom-range">
-                            <input type="date" name="start_date" class="date-input" placeholder="Tarikh Mula">
-                            <input type="date" name="end_date" class="date-input" placeholder="Tarikh Akhir">
+                        <div class="format-option" onclick="selectFormat(this, 'csv')">
+                            <i class="fas fa-file-csv"></i>
+                            <div>CSV</div>
                         </div>
                     </div>
+                    <input type="hidden" name="format" id="reportFormat" value="pdf">
+                </div>
 
-                    <!-- Output Format -->
-                    <div class="config-group">
-                        <label class="config-label">
-                            <i class="fas fa-download"></i>
-                            Format Output
-                        </label>
-                        
-                        <div class="format-options">
-                            <div class="format-option format-pdf selected" onclick="selectFormat('pdf')">
-                                <div class="format-icon">
-                                    <i class="fas fa-file-pdf"></i>
-                                </div>
-                                <div>PDF</div>
-                            </div>
-                            
-                            <div class="format-option format-excel" onclick="selectFormat('excel')">
-                                <div class="format-icon">
-                                    <i class="fas fa-file-excel"></i>
-                                </div>
-                                <div>Excel</div>
-                            </div>
-                            
-                            <div class="format-option format-csv" onclick="selectFormat('csv')">
-                                <div class="format-icon">
-                                    <i class="fas fa-file-csv"></i>
-                                </div>
-                                <div>CSV</div>
-                            </div>
-                        </div>
-                        
-                        <input type="hidden" name="format" id="reportFormat" value="pdf">
-                    </div>
+                <div class="action-row">
+                    <button type="button" class="btn-preview" onclick="generatePreview()">
+                        <i class="fas fa-eye"></i> Preview
+                    </button>
+
+                    <button type="submit" name="generate_report" class="btn-generate">
+                        <i class="fas fa-download"></i> Generate
+                    </button>
                 </div>
             </form>
+        </div>
 
-            <!-- Preview Section -->
-            <div class="preview-section">
-                <div class="preview-header">
-                    <h3 class="preview-title">Pratonton Laporan</h3>
-                    <span style="color: var(--text-secondary); font-size: 14px;">
-                        <i class="fas fa-eye"></i> Data contoh berdasarkan pilihan
-                    </span>
-                </div>
-                
-                <div class="preview-content">
-                    <!-- Report Preview -->
-                    <div id="reportPreview">
-                        <?php if (isset($_POST['report_type'])): ?>
-                            <!-- Generated Report Preview -->
-                            <div style="text-align: center; padding: 40px;">
-                                <i class="fas fa-file-alt" style="font-size: 48px; color: var(--primary); margin-bottom: 16px;"></i>
-                                <h3 style="color: var(--text-primary); margin-bottom: 8px;">Laporan Dijana</h3>
-                                <p style="color: var(--text-secondary);">Laporan <?= htmlspecialchars($_POST['report_type']) ?> dalam format <?= htmlspecialchars($_POST['format']) ?></p>
+        <div>
+            <div class="card chart-card">
+                <h2 class="card-title">Attendance Overview</h2>
+                <p class="card-subtitle">Attendance rate by programme.</p>
+
+                <div class="chart-wrapper">
+                    <?php foreach ($programs as $program): ?>
+                        <?php $rate = round(($program['attendance'] / $program['participants']) * 100); ?>
+                        <div class="chart-item">
+                            <div class="chart-bar" style="height: <?= $rate * 1.7 ?>px;">
+                                <span class="chart-value"><?= $rate ?>%</span>
                             </div>
-                        <?php else: ?>
-                            <!-- Default Preview -->
-                            <table class="preview-table">
-                                <thead>
-                                    <tr>
-                                        <th>Program</th>
-                                        <th>Tarikh</th>
-                                        <th>Peserta</th>
-                                        <th>Kehadiran</th>
-                                        <th>Rating</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($programs as $program): ?>
-                                    <tr>
-                                        <td><?= htmlspecialchars($program['name']) ?></td>
-                                        <td><?= date('d/m/Y', strtotime($program['date'])) ?></td>
-                                        <td><?= $program['participants'] ?></td>
-                                        <td>
-                                            <span class="attendance-badge <?= $program['attendance']/$program['participants'] > 0.9 ? 'attendance-high' : 'attendance-medium' ?>">
-                                                <?= $program['attendance'] ?> (<?= round(($program['attendance']/$program['participants'])*100) ?>%)
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="rating-stars">
-                                                <?= str_repeat('★', floor($program['rating'])) ?><?= str_repeat('☆', 5 - floor($program['rating'])) ?>
-                                                <?= $program['rating'] ?>
-                                            </span>
-                                        </td>
-                                    </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                            
-                            <!-- Statistics Summary -->
-                            <div class="stats-summary">
-                                <div class="stat-item">
-                                    <div class="stat-value"><?= count($programs) ?></div>
-                                    <div class="stat-label">Jumlah Program</div>
-                                </div>
-                                <div class="stat-item">
-                                    <div class="stat-value"><?= $totalParticipants ?></div>
-                                    <div class="stat-label">Jumlah Peserta</div>
-                                </div>
-                                <div class="stat-item">
-                                    <div class="stat-value"><?= $attendanceRate ?>%</div>
-                                    <div class="stat-label">Kadar Kehadiran</div>
-                                </div>
-                                <div class="stat-item">
-                                    <div class="stat-value"><?= $averageRating ?>/5</div>
-                                    <div class="stat-label">Rating Purata</div>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                
-                <!-- Action Buttons -->
-                <div class="action-buttons">
-                    <button type="button" class="btn-preview" onclick="generatePreview()">
-                        <i class="fas fa-eye"></i> Pratinjau Laporan
-                    </button>
-                    <button type="submit" name="generate_report" class="btn-generate" onclick="generateReport()">
-                        <i class="fas fa-download"></i> Jana & Muat Turun
-                    </button>
+                            <div class="chart-label">P<?= $program['id'] ?></div>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
+        </div>
 
-            <!-- Report Tips -->
-            <div class="report-tips">
-                <div class="tips-title">
-                    <i class="fas fa-lightbulb"></i>
-                    Tips untuk Laporan yang Berkesan
-                </div>
-                <ul class="tips-list">
-                    <li>Pilih jenis laporan yang sesuai dengan keperluan analisis anda</li>
-                    <li>Gunakan laporan ringkasan untuk gambaran keseluruhan prestasi program</li>
-                    <li>Laporan kehadiran membantu analisis kadar penyertaan peserta</li>
-                    <li>Format PDF sesuai untuk perkongsian, Excel untuk analisis lanjut</li>
-                    <li>Jana laporan selepas program selesai untuk data yang lengkap</li>
-                </ul>
-            </div>
+    </div>
 
-        </section>
-    </main>
+    <div class="card">
+        <h2 class="card-title">Report Preview</h2>
+        <p class="card-subtitle">Preview changes based on selected report type.</p>
+
+        <div class="preview-table-wrapper" id="reportPreview">
+            <table class="preview-table">
+                <thead>
+                    <tr>
+                        <th>Programme</th>
+                        <th>Participants</th>
+                        <th>Attendance</th>
+                        <th>Rating</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($programs as $program): ?>
+                        <?php $rate = round(($program['attendance'] / $program['participants']) * 100); ?>
+                        <tr>
+                            <td><?= htmlspecialchars($program['name']) ?></td>
+                            <td><?= $program['participants'] ?></td>
+                            <td>
+                                <span class="badge <?= $rate >= 90 ? 'badge-green' : 'badge-orange' ?>">
+                                    <?= $program['attendance'] ?> / <?= $program['participants'] ?> (<?= $rate ?>%)
+                                </span>
+                            </td>
+                            <td><span class="rating"><i class="fas fa-star"></i> <?= $program['rating'] ?>/5</span></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</main>
 </div>
 
 <script>
-    // Initialize default selections
-    document.addEventListener('DOMContentLoaded', function() {
-        // Set today's date for date inputs
-        const today = new Date().toISOString().split('T')[0];
-        document.querySelector('input[name="start_date"]').value = today;
-        document.querySelector('input[name="end_date"]').value = today;
-    });
-    
-    // Select report type
-    function selectReportType(type) {
-        document.getElementById('reportType').value = type;
-        
-        // Update UI
-        document.querySelectorAll('.report-type-card').forEach(card => {
-            card.classList.remove('selected');
-        });
-        event.currentTarget.classList.add('selected');
-        
-        // Update preview
-        generatePreview();
-    }
-    
-    // Select format
-    function selectFormat(format) {
-        document.getElementById('reportFormat').value = format;
-        
-        // Update UI
-        document.querySelectorAll('.format-option').forEach(option => {
-            option.classList.remove('selected');
-        });
-        event.currentTarget.classList.add('selected');
-    }
-    
-    // Toggle custom date range
-    function toggleCustomDateRange() {
-        const dateRange = document.getElementById('dateRange').value;
-        const customRange = document.getElementById('customDateRange');
-        
-        if (dateRange === 'custom') {
-            customRange.style.display = 'grid';
-        } else {
-            customRange.style.display = 'none';
-        }
-    }
-    
-    // Generate report preview
-    function generatePreview() {
-        const reportType = document.getElementById('reportType').value;
-        const programId = document.getElementById('programSelect').value;
-        const dateRange = document.getElementById('dateRange').value;
-        
-        // Show loading state
-        const previewBtn = document.querySelector('.btn-preview');
-        const originalContent = previewBtn.innerHTML;
-        previewBtn.innerHTML = '<div class="loading"></div> Memuatkan...';
-        previewBtn.disabled = true;
-        
-        // In real app, fetch preview data via AJAX
-        // For now, simulate with timeout
-        setTimeout(() => {
-            const previewContent = document.getElementById('reportPreview');
-            
-            let previewHTML = '';
-            if (programId === 'all') {
-                previewHTML = `
-                    <table class="preview-table">
-                        <thead>
-                            <tr>
-                                <th>Program</th>
-                                <th>Tarikh</th>
-                                <th>Peserta</th>
-                                <th>Kehadiran</th>
-                                <th>Rating</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($programs as $program): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($program['name']) ?></td>
-                                <td><?= date('d/m/Y', strtotime($program['date'])) ?></td>
-                                <td><?= $program['participants'] ?></td>
-                                <td>
-                                    <span class="attendance-badge ${<?= $program['attendance']/$program['participants'] > 0.9 ?> ? 'attendance-high' : 'attendance-medium'}">
-                                        <?= $program['attendance'] ?> (<?= round(($program['attendance']/$program['participants'])*100) ?>%)
-                                    </span>
-                                </td>
-                                <td>
-                                    <span class="rating-stars">
-                                        ${'★'.repeat(Math.floor(<?= $program['rating'] ?>))}${'☆'.repeat(5 - Math.floor(<?= $program['rating'] ?>))}
-                                        <?= $program['rating'] ?>
-                                    </span>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                    
-                    <div class="stats-summary">
-                        <div class="stat-item">
-                            <div class="stat-value"><?= count($programs) ?></div>
-                            <div class="stat-label">Jumlah Program</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value"><?= $totalParticipants ?></div>
-                            <div class="stat-label">Jumlah Peserta</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value"><?= $attendanceRate ?>%</div>
-                            <div class="stat-label">Kadar Kehadiran</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value"><?= $averageRating ?>/5</div>
-                            <div class="stat-label">Rating Purata</div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                const program = <?= json_encode($programs[0]) ?>;
-                previewHTML = `
-                    <div style="text-align: center; padding: 40px;">
-                        <h3 style="color: var(--text-primary); margin-bottom: 16px;">${program.name}</h3>
-                        <p style="color: var(--text-secondary); margin-bottom: 24px;">Laporan ${reportType} untuk program ini</p>
-                        
-                        <div class="stats-summary" style="max-width: 600px; margin: 0 auto;">
-                            <div class="stat-item">
-                                <div class="stat-value">${program.participants}</div>
-                                <div class="stat-label">Jumlah Peserta</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-value">${program.attendance}</div>
-                                <div class="stat-label">Kehadiran</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-value">${Math.round((program.attendance/program.participants)*100)}%</div>
-                                <div class="stat-label">Kadar Kehadiran</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-value">${program.rating}/5</div>
-                                <div class="stat-label">Rating</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            previewContent.innerHTML = previewHTML;
-            
-            // Restore button
-            previewBtn.innerHTML = originalContent;
-            previewBtn.disabled = false;
-            
-            // Show notification
-            showNotification('Pratonton laporan dikemas kini');
-        }, 1000);
-    }
-    
-    // Generate and download report
-    function generateReport() {
-        const reportType = document.getElementById('reportType').value;
-        const programId = document.getElementById('programSelect').value;
-        const dateRange = document.getElementById('dateRange').value;
-        const format = document.getElementById('reportFormat').value;
-        
-        // Show loading state
-        const generateBtn = document.querySelector('.btn-generate');
-        const originalContent = generateBtn.innerHTML;
-        generateBtn.innerHTML = '<div class="loading"></div> Menjana...';
-        generateBtn.disabled = true;
-        
-        // Simulate report generation
-        setTimeout(() => {
-            // In real app, this would make an AJAX request to generate the report
-            // For now, simulate download
-            const programName = programId === 'all' ? 'semua-program' : 'program-' + programId;
-            const filename = `laporan-${reportType}-${programName}-${new Date().toISOString().split('T')[0]}.${format}`;
-            
-            // Create download link
-            const content = `Laporan ${reportType} untuk ${programId === 'all' ? 'Semua Program' : 'Program ID ' + programId}
-Tempoh: ${dateRange}
-Dijana pada: ${new Date().toLocaleString()}
+const programs = <?= json_encode($programs) ?>;
 
----
-CONTOH DATA LAPORAN
----`;
-            
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            // Restore button
-            generateBtn.innerHTML = originalContent;
-            generateBtn.disabled = false;
-            
-            // Show notification
-            showNotification('Laporan berjaya dijana dan dimuat turun');
-            
-            // In real app, submit the form
-            // document.querySelector('form').submit();
-        }, 2000);
-    }
-    
-    // Show notification
-    function showNotification(message) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--primary);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            box-shadow: var(--shadow-lg);
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+function selectReportType(card, type) {
+    document.getElementById('reportType').value = type;
+    document.querySelectorAll('.report-type-card').forEach(item => item.classList.remove('selected'));
+    card.classList.add('selected');
+    generatePreview();
+}
+
+function selectFormat(card, format) {
+    document.getElementById('reportFormat').value = format;
+    document.querySelectorAll('.format-option').forEach(item => item.classList.remove('selected'));
+    card.classList.add('selected');
+}
+
+function generatePreview() {
+    const reportType = document.getElementById('reportType').value;
+    const preview = document.getElementById('reportPreview');
+
+    let html = '';
+
+    if (reportType === 'attendance') {
+        html = `
+        <table class="preview-table">
+            <thead>
+                <tr>
+                    <th>Programme</th>
+                    <th>Participants</th>
+                    <th>Attendance</th>
+                    <th>Attendance Rate</th>
+                </tr>
+            </thead>
+            <tbody>
         `;
-        notification.innerHTML = `
-            <i class="fas fa-check-circle"></i>
-            <span>${message}</span>
-        `;
-        document.body.appendChild(notification);
-        
-        // Remove after 3 seconds
-        setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
+
+        programs.forEach(program => {
+            const rate = Math.round((program.attendance / program.participants) * 100);
+            html += `
+                <tr>
+                    <td>${program.name}</td>
+                    <td>${program.participants}</td>
+                    <td>${program.attendance}</td>
+                    <td><span class="badge ${rate >= 90 ? 'badge-green' : 'badge-orange'}">${rate}%</span></td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table>`;
     }
-    
-    // Add animation styles
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
+
+    if (reportType === 'feedback') {
+        html = `
+        <table class="preview-table">
+            <thead>
+                <tr>
+                    <th>Programme</th>
+                    <th>Total Feedback</th>
+                    <th>Average Rating</th>
+                </tr>
+            </thead>
+            <tbody>
+        `;
+
+        programs.forEach(program => {
+            html += `
+                <tr>
+                    <td>${program.name}</td>
+                    <td>${program.feedback}</td>
+                    <td><span class="rating"><i class="fas fa-star"></i> ${program.rating}/5</span></td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table>`;
+    }
+
+    preview.innerHTML = html;
+}
 </script>
 
 </body>

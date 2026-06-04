@@ -2,22 +2,33 @@
 session_start();
 require_once __DIR__ . '/lib/bootstrap.php';
 requireRole('penganjur');
-$activePage = 'hebahan-program';
+$activePage = 'urus-program';
+
+$editId = (int) ($_GET['id'] ?? 0);
+$dbCategories = categories()->listAll();
+
+if (!db()->isConfigured() || $editId <= 0) {
+    die('Program tidak ditemui atau pangkalan data belum dikonfigurasi.');
+}
+
+$row = programs()->findById($editId);
+if (!$row) {
+    die('Program tidak ditemui!');
+}
+
+$program = programs()->toEditForm($row);
+$updated = false;
+$errorMessage = "";
+$newPosterPath = $program['poster'];
 
 $uploadDir = 'uploads/posters/';
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0755, true);
 }
 
-$submitted = false;
-$posterPath = '';
-$errorMessage = '';
-$dbCategories = categories()->listAll();
+if (isset($_POST['update_program'])) {
 
-if (isset($_POST['submit_program'])) {
-    if (!db()->isConfigured()) {
-        $errorMessage = 'Supabase belum dikonfigurasi. Sila tetapkan fail .env.';
-    } elseif (isset($_FILES['poster']) && $_FILES['poster']['error'] === UPLOAD_ERR_OK) {
+    if (isset($_FILES['poster']) && $_FILES['poster']['error'] === UPLOAD_ERR_OK) {
         $fileTmpPath = $_FILES['poster']['tmp_name'];
         $fileName = basename($_FILES['poster']['name']);
         $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
@@ -31,37 +42,35 @@ if (isset($_POST['submit_program'])) {
             $destination = $uploadDir . $newFileName;
 
             if (move_uploaded_file($fileTmpPath, $destination)) {
-                $posterPath = $destination;
-                $kategoriSlug = $_POST['kategori'] ?? '';
-                $category = categories()->findBySlug($kategoriSlug);
-
-                $programData = [
-                    'nama' => trim($_POST['nama_program'] ?? ''),
-                    'tarikh' => $_POST['tarikh'] ?? '',
-                    'masa' => ($_POST['masa'] ?? '09:00') . ':00',
-                    'lokasi' => trim($_POST['lokasi'] ?? ''),
-                    'kategori_id' => $category['id'] ?? null,
-                    'kapasiti' => (int) ($_POST['kapasiti'] ?? 100),
-                    'penerangan' => trim($_POST['penerangan'] ?? ''),
-                    'poster_url' => $posterPath,
-                    'penganjur_id' => $_SESSION['user_id'] ?? null,
-                    'mata' => 100,
-                ];
-
-                $saveResult = programs()->create($programData);
-                if ($saveResult['ok']) {
-                    $submitted = true;
-                } else {
-                    $errorMessage = 'Program gagal disimpan: ' . ($saveResult['error'] ?? 'Ralat pangkalan data');
-                }
+                $newPosterPath = $destination;
             } else {
-                $errorMessage = 'Poster gagal dimuat naik.';
+                $errorMessage = "Poster gagal dimuat naik.";
             }
         } else {
-            $errorMessage = 'Sila muat naik fail poster dalam format PNG, JPG atau JPEG sahaja.';
+            $errorMessage = "Sila muat naik poster dalam format PNG, JPG atau JPEG sahaja.";
         }
-    } else {
-        $errorMessage = 'Sila pilih poster program.';
+    }
+
+    if (!$errorMessage) {
+        $category = categories()->findByName($_POST['kategori'] ?? $program['kategori']);
+        $updateData = [
+            'nama' => trim($_POST['nama_program'] ?? $program['nama']),
+            'tarikh' => $_POST['tarikh'] ?? $program['tarikh'],
+            'masa' => ($_POST['masa'] ?? $program['masa']) . (strlen($_POST['masa'] ?? '') === 5 ? ':00' : ''),
+            'lokasi' => trim($_POST['lokasi'] ?? $program['lokasi']),
+            'kategori_id' => $category['id'] ?? null,
+            'kapasiti' => (int) ($_POST['kapasiti'] ?? $program['kapasiti']),
+            'penerangan' => trim($_POST['penerangan'] ?? $program['penerangan']),
+            'poster_url' => $newPosterPath,
+        ];
+
+        $saveResult = programs()->update($editId, $updateData);
+        if ($saveResult['ok']) {
+            $program = programs()->toEditForm($saveResult['data'][0] ?? array_merge($program, $updateData));
+            $updated = true;
+        } else {
+            $errorMessage = 'Kemaskini gagal: ' . ($saveResult['error'] ?? 'Ralat pangkalan data');
+        }
     }
 }
 
@@ -79,7 +88,7 @@ $menu = [
 <html lang="ms">
 <head>
 <meta charset="UTF-8">
-<title>Hebahan Program | UKMInvolve</title>
+<title>Edit Program | UKMInvolve</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <style>
@@ -146,9 +155,8 @@ button,input,textarea,select{font-family:inherit}
     text-align:center;
     margin-bottom:16px;
 }
-.poster-preview img{width:100%;height:100%;object-fit:cover;display:none}
+.poster-preview img{width:100%;height:100%;object-fit:cover}
 .poster-placeholder i{font-size:46px;margin-bottom:12px}
-.poster-placeholder p{color:white;font-weight:700}
 
 .upload-btn{
     width:100%;
@@ -283,25 +291,27 @@ button,input,textarea,select{font-family:inherit}
 
 <main class="main-section">
 
-<?php if ($submitted): ?>
+<?php if ($updated): ?>
 
     <div class="success-card">
         <div class="success-icon">
             <i class="fas fa-check-circle"></i>
         </div>
-        <h2>Program Published!</h2>
-        <p>Your programme has been published and students can now view it.</p>
 
-        <?php if ($posterPath): ?>
-            <img src="<?= htmlspecialchars($posterPath) ?>" class="success-poster" alt="Programme Poster">
+        <h2>Program Updated!</h2>
+        <p>Your programme information has been successfully updated.</p>
+
+        <?php if ($newPosterPath): ?>
+            <img src="<?= htmlspecialchars($newPosterPath) ?>" class="success-poster" alt="Updated Poster">
         <?php endif; ?>
 
         <div class="form-actions">
             <a href="urus-program.php" class="btn-primary">
-                <i class="fas fa-calendar-check"></i> Manage Programme
+                <i class="fas fa-calendar-check"></i> Back to Manage Programmes
             </a>
-            <a href="hebahan-program.php" class="btn-outline">
-                <i class="fas fa-plus"></i> New Programme
+
+            <a href="edit-program.php?id=<?= $program['id'] ?>" class="btn-outline">
+                <i class="fas fa-edit"></i> Edit Again
             </a>
         </div>
     </div>
@@ -310,8 +320,8 @@ button,input,textarea,select{font-family:inherit}
 
     <div class="page-header">
         <div>
-            <h1>Create Announcement</h1>
-            <p>Upload a real PNG/JPG poster and publish a new programme for students.</p>
+            <h1>Edit Programme</h1>
+            <p>Update programme details and replace the poster with a real PNG/JPG file.</p>
         </div>
     </div>
 
@@ -325,38 +335,44 @@ button,input,textarea,select{font-family:inherit}
 
         <div class="poster-card">
             <h2>Programme Poster</h2>
-            <p>Upload your actual event poster in PNG, JPG or JPEG format.</p>
+            <p>Current poster will be shown here. You may upload a new PNG/JPG poster.</p>
 
             <div class="poster-preview">
-                <img id="posterPreview" alt="Poster Preview">
-                <div class="poster-placeholder" id="posterPlaceholder">
-                    <i class="fas fa-image"></i>
-                    <p>No poster selected</p>
-                </div>
+                <?php if (!empty($program['poster'])): ?>
+                    <img id="posterPreview" src="<?= htmlspecialchars($program['poster']) ?>" alt="Poster Program">
+                <?php else: ?>
+                    <div class="poster-placeholder" id="posterPlaceholder">
+                        <i class="fas fa-image"></i>
+                        <p>No poster available</p>
+                    </div>
+                    <img id="posterPreview" style="display:none;" alt="Poster Preview">
+                <?php endif; ?>
             </div>
 
             <label for="posterInput" class="upload-btn">
-                <i class="fas fa-upload"></i> Choose Real Poster PNG/JPG
+                <i class="fas fa-upload"></i> Change Poster PNG/JPG
             </label>
-            <input type="file" id="posterInput" name="poster" accept="image/png,image/jpeg" hidden required>
+
+            <input type="file" id="posterInput" name="poster" accept="image/png,image/jpeg" hidden>
         </div>
 
         <div class="card">
             <h2 class="form-title">Programme Details</h2>
-            <p class="form-subtitle">Fill in all programme information before publishing.</p>
+            <p class="form-subtitle">Update the information below before saving changes.</p>
 
             <div class="form-grid">
                 <div class="form-group form-full">
                     <label class="form-label">Programme Name <span class="required">*</span></label>
-                    <input type="text" name="nama_program" class="form-input" placeholder="Example: Workshop Kepimpinan Mahasiswa" required>
+                    <input type="text" name="nama_program" class="form-input" value="<?= htmlspecialchars($program['nama']) ?>" required>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Category <span class="required">*</span></label>
                     <select name="kategori" class="form-select" required>
-                        <option value="">Choose category</option>
-                        <?php foreach ($dbCategories as $cat): ?>
-                            <option value="<?= htmlspecialchars($cat['slug']) ?>">
+                        <?php foreach ($dbCategories as $cat):
+                            $selected = ($program['kategori'] ?? '') === $cat['nama'] ? 'selected' : '';
+                        ?>
+                            <option value="<?= htmlspecialchars($cat['nama']) ?>" <?= $selected ?>>
                                 <?= htmlspecialchars($cat['nama']) ?>
                             </option>
                         <?php endforeach; ?>
@@ -365,36 +381,37 @@ button,input,textarea,select{font-family:inherit}
 
                 <div class="form-group">
                     <label class="form-label">Capacity <span class="required">*</span></label>
-                    <input type="number" name="kapasiti" class="form-input" min="1" placeholder="100" required>
+                    <input type="number" name="kapasiti" class="form-input" min="1" value="<?= htmlspecialchars($program['kapasiti']) ?>" required>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Date <span class="required">*</span></label>
-                    <input type="date" name="tarikh" class="form-input" required>
+                    <input type="date" name="tarikh" class="form-input" value="<?= htmlspecialchars($program['tarikh']) ?>" required>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Time <span class="required">*</span></label>
-                    <input type="time" name="masa" class="form-input" required>
+                    <input type="time" name="masa" class="form-input" value="<?= htmlspecialchars($program['masa']) ?>" required>
                 </div>
 
                 <div class="form-group form-full">
                     <label class="form-label">Location <span class="required">*</span></label>
-                    <input type="text" name="lokasi" class="form-input" placeholder="Example: Dewan Tun Canselor, UKM" required>
+                    <input type="text" name="lokasi" class="form-input" value="<?= htmlspecialchars($program['lokasi']) ?>" required>
                 </div>
 
                 <div class="form-group form-full">
-                    <label class="form-label">Programme Description <span class="required">*</span></label>
-                    <textarea name="penerangan" class="form-textarea" placeholder="Describe the programme details..." required></textarea>
+                    <label class="form-label">Programme Description</label>
+                    <textarea name="penerangan" class="form-textarea"><?= htmlspecialchars($program['penerangan']) ?></textarea>
                 </div>
             </div>
 
             <div class="form-actions">
-                <button type="button" class="btn-outline" onclick="alert('Draft saved temporarily.')">
-                    <i class="fas fa-save"></i> Save Draft
-                </button>
-                <button type="submit" name="submit_program" class="btn-primary">
-                    <i class="fas fa-paper-plane"></i> Publish Programme
+                <a href="urus-program.php" class="btn-outline">
+                    <i class="fas fa-arrow-left"></i> Cancel
+                </a>
+
+                <button type="submit" name="update_program" class="btn-primary">
+                    <i class="fas fa-edit"></i> Update Programme
                 </button>
             </div>
         </div>
@@ -409,7 +426,6 @@ button,input,textarea,select{font-family:inherit}
 <script>
 const posterInput = document.getElementById('posterInput');
 const posterPreview = document.getElementById('posterPreview');
-const posterPlaceholder = document.getElementById('posterPlaceholder');
 
 if (posterInput) {
     posterInput.addEventListener('change', function () {
@@ -422,8 +438,6 @@ if (posterInput) {
         if (!allowedTypes.includes(file.type)) {
             alert('Please upload PNG, JPG or JPEG only.');
             this.value = '';
-            posterPreview.style.display = 'none';
-            posterPlaceholder.style.display = 'block';
             return;
         }
 
@@ -432,7 +446,6 @@ if (posterInput) {
         reader.onload = function (e) {
             posterPreview.src = e.target.result;
             posterPreview.style.display = 'block';
-            posterPlaceholder.style.display = 'none';
         };
 
         reader.readAsDataURL(file);

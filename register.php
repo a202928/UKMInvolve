@@ -1,9 +1,13 @@
 <?php
 session_start();
+require_once __DIR__ . '/config/database.php';
 
 $error = $_SESSION['error'] ?? '';
 $success = $_SESSION['success'] ?? '';
 unset($_SESSION['error'], $_SESSION['success']);
+
+$envStatus = Database::checkEnv();
+$configHint = Database::getSetupMessage();
 ?>
 <!DOCTYPE html>
 <html lang="ms">
@@ -68,19 +72,25 @@ unset($_SESSION['error'], $_SESSION['success']);
                 </div>
 
                 <div class="form-group">
-                    <label for="password">Kata Laluan</label>
-                    <input type="password" name="password" id="password"
+                    <label for="kata_laluan">Kata Laluan</label>
+                    <input type="password" name="kata_laluan" id="kata_laluan"
                            placeholder="Minimum 6 aksara" required>
                 </div>
 
                 <div class="form-group">
-                    <label for="confirm_password">Sahkan Kata Laluan</label>
-                    <input type="password" name="confirm_password" id="confirm_password"
+                    <label for="sahkan_kata_laluan">Sahkan Kata Laluan</label>
+                    <input type="password" name="sahkan_kata_laluan" id="sahkan_kata_laluan"
                            placeholder="Masukkan semula kata laluan" required>
                 </div>
 
                 <?php if ($error): ?>
-                    <div class="error-box"><?= $error ?></div>
+                    <div class="error-box"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <?php if ($configHint && !$envStatus['is_ready']): ?>
+                    <div class="error-box" style="background:#fff7ed;color:#9a3412;border-color:#fdba74;">
+                        <?= htmlspecialchars($configHint) ?>
+                    </div>
                 <?php endif; ?>
 
                 <button type="submit" class="btn-primary">Daftar Akaun</button>

@@ -1,0 +1,3 @@
+.env
+uploads/posters/*
+!uploads/posters/.gitkeep
