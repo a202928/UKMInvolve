@@ -4,14 +4,6 @@ require_once __DIR__ . '/lib/bootstrap.php';
 requireRole('pelajar');
 $activePage = 'search';
 
-function getImagePath($filename) {
-    $paths = [$filename, "images/" . $filename, "images/events/" . $filename];
-    foreach ($paths as $path) {
-        if (file_exists($path)) return $path;
-    }
-    return "";
-}
-
 $programs = [];
 if (db()->isConfigured()) {
     foreach (programs()->listWithCategory() as $row) {

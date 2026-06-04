@@ -811,7 +811,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
 
                     <!-- Program Image -->
-                    <img src="images/<?= $program['image'] ?>" alt="<?= htmlspecialchars($program['title']) ?>" class="program-image" onerror="this.src='https://via.placeholder.com/800x400/2563eb/ffffff?text=Program+Image'">
+                    <img src="<?= htmlspecialchars(getImagePath($program['image'])) ?>" alt="<?= htmlspecialchars($program['title']) ?>" class="program-image" onerror="this.src='https://via.placeholder.com/800x400/2563eb/ffffff?text=Program+Image'">
 
                     <!-- Program Info Grid -->
                     <div class="info-grid">

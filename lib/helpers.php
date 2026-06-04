@@ -65,3 +65,25 @@ function slugify(string $text): string
     $text = preg_replace('/[^a-z0-9]+/', '-', $text) ?? $text;
     return trim($text, '-');
 }
+
+function getImagePath(?string $filename): string
+{
+    if (!$filename) {
+        return '';
+    }
+
+    $paths = [
+        $filename,
+        "images/" . $filename,
+        "images/events/" . $filename
+    ];
+
+    foreach ($paths as $path) {
+        if (file_exists($path)) {
+            return $path;
+        }
+    }
+
+    return '';
+}
+

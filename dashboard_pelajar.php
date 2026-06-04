@@ -33,22 +33,6 @@ elseif ($currentPoints >= 800)   { $level = 4; $levelName = 'Active Achiever'; }
 elseif ($currentPoints >= 500)   { $level = 3; $levelName = 'Campus Explorer'; }
 elseif ($currentPoints >= 200)   { $level = 2; $levelName = 'Active Starter'; }
 
-function getImagePath($filename) {
-    $paths = [
-        $filename,
-        "images/" . $filename,
-        "images/events/" . $filename
-    ];
-
-    foreach ($paths as $path) {
-        if (file_exists($path)) {
-            return $path;
-        }
-    }
-
-    return "";
-}
-
 $recommendedImage = getImagePath("program5.jpg");
 
 $events = [];

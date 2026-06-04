@@ -78,7 +78,7 @@ class ProgramRepository
             'location' => $row['lokasi'],
             'category' => $categoryName,
             'description' => $row['penerangan'] ?? '',
-            'image' => $row['gambar'] ?? 'program1.jpg',
+            'image' => !empty($row['poster_url']) ? $row['poster_url'] : ($row['gambar'] ?? 'program1.jpg'),
             'participants' => $participants,
             'capacity' => $capacity,
             'status' => programAvailability($participants, $capacity),
@@ -120,7 +120,7 @@ class ProgramRepository
             'location' => $row['lokasi'],
             'category' => $row['kategori']['nama'] ?? 'Umum',
             'description' => $row['penerangan'] ?? '',
-            'image' => $row['gambar'] ?? 'program1.jpg',
+            'image' => !empty($row['poster_url']) ? $row['poster_url'] : ($row['gambar'] ?? 'program1.jpg'),
             'participants' => $participants,
             'capacity' => $capacity,
             'status' => programAvailability($participants, $capacity),
@@ -159,7 +159,7 @@ class ProgramRepository
             'category' => $slug,
             'date' => formatMalayDate($row['tarikh'] ?? null),
             'location' => $row['lokasi'],
-            'image' => $row['gambar'] ?? 'program1.jpg',
+            'image' => !empty($row['poster_url']) ? $row['poster_url'] : ($row['gambar'] ?? 'program1.jpg'),
             'points' => (int) ($row['mata'] ?? 100),
         ];
     }
@@ -205,7 +205,7 @@ class ProgramRepository
             'points' => (int) ($row['mata'] ?? 100),
             'icon' => $icon,
             'color' => $color,
-            'image' => $row['gambar'] ?? 'program1.jpg',
+            'image' => !empty($row['poster_url']) ? $row['poster_url'] : ($row['gambar'] ?? 'program1.jpg'),
         ];
     }
 }

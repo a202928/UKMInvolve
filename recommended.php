@@ -162,7 +162,7 @@ a{text-decoration:none;color:inherit}
             <?php foreach ($recommendedPrograms as $program): ?>
                 <div class="program-card">
                     <div class="program-image">
-                        <img src="images/<?= $program['image'] ?>" alt="<?= $program['title'] ?>">
+                        <img src="<?= htmlspecialchars(getImagePath($program['image'])) ?>" alt="<?= htmlspecialchars($program['title']) ?>">
                         <div class="match-badge">
                             <i class="fas fa-bolt"></i> Match
                         </div>
