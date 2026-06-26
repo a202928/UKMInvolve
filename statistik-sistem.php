@@ -3,75 +3,213 @@ session_start();
 require_once __DIR__ . '/lib/bootstrap.php';
 requireRole('pentadbir');
 $activePage = 'statistik-sistem';
+$adminInitial = strtoupper(substr($_SESSION['nama'] ?? 'A', 0, 1));
 
-// Real stats from DB
-$totalUsers    = 0;
-$totalPrograms = 0;
-$totalFeedback = 0;
-$totalRegs     = 0;
-$categoryStats = [];
-$topPrograms   = [];
-
-if (db()->isConfigured()) {
-    $totalUsers    = users()->countAll();
-    $allPrograms   = programs()->listWithCategory();
-    $totalPrograms = count($allPrograms);
-
-    $fbResult      = db()->select('maklum_balas', '?select=id,rating');
-    $fbRows        = ($fbResult['ok']) ? $fbResult['data'] : [];
-    $totalFeedback = count($fbRows);
-    $avgRating     = $totalFeedback > 0
-        ? round(array_sum(array_column($fbRows, 'rating')) / $totalFeedback, 1)
-        : 0;
-
-    $regResult  = db()->select('pendaftaran', '?select=id');
-    $totalRegs  = ($regResult['ok']) ? count($regResult['data']) : 0;
-
-    // Attendance rate = hadir / total registrations
-    $hadirResult    = db()->select('pendaftaran', '?select=id&status=eq.hadir');
-    $hadirCount     = ($hadirResult['ok']) ? count($hadirResult['data']) : 0;
-    $attendanceRate = $totalRegs > 0 ? round(($hadirCount / $totalRegs) * 100) : 0;
-
-    // Category participation counts
-    $allCategories = categories()->listAll();
-    foreach ($allCategories as $cat) {
-        $count = categories()->programCount((int)$cat['id']);
-        if ($count > 0) {
-            $maxCap = array_sum(array_column(
-                array_filter($allPrograms, fn($p) => ($p['kategori_id'] ?? null) == $cat['id']),
-                'kapasiti'
-            ));
-            $filled = array_sum(array_column(
-                array_filter($allPrograms, fn($p) => ($p['kategori_id'] ?? null) == $cat['id']),
-                'peserta_semasa'
-            ));
-            $pct = $maxCap > 0 ? round(($filled / $maxCap) * 100) : 0;
-            $categoryStats[] = ['name' => $cat['nama'], 'value' => $pct];
-        }
-    }
-
-    // Top programs by participants
-    usort($allPrograms, fn($a, $b) => ($b['peserta_semasa'] ?? 0) <=> ($a['peserta_semasa'] ?? 0));
-    foreach (array_slice($allPrograms, 0, 4) as $p) {
-        $topPrograms[] = [
-            'name'         => $p['nama'],
-            'participants' => (int)($p['peserta_semasa'] ?? 0),
-            'rating'       => (float)($p['rating'] ?? 0),
-        ];
-    }
-} else {
-    $avgRating = 0;
-    $attendanceRate = 0;
+// 1. Get period filter: weekly (default), monthly, semester
+$period = $_GET['period'] ?? 'weekly';
+if (!in_array($period, ['weekly', 'monthly', 'semester'], true)) {
+    $period = 'weekly';
 }
 
-$stats = [
-    'users'           => $totalUsers,
-    'programs'        => $totalPrograms,
-    'feedback'        => $totalFeedback,
-    'attendance'      => $attendanceRate,
-    'rating'          => $avgRating,
-    'active_sessions' => $totalRegs,
+// 2. Fetch all necessary data from database
+$totalUsers = 0;
+$totalPrograms = 0;
+$totalRegs = 0;
+$totalAtt = 0;
+
+$allPrograms = [];
+$allRegs = [];
+$allAtts = [];
+$allCategories = [];
+
+if (db()->isConfigured()) {
+    // Overall Counts
+    $totalUsers = users()->countAll();
+    
+    $allPrograms = programs()->listWithCategory();
+    $totalPrograms = count($allPrograms);
+    
+    $regRes = db()->select('pendaftaran', '?select=id,program_id,tarikh_daftar,status');
+    $allRegs = $regRes['ok'] ? $regRes['data'] : [];
+    $totalRegs = count($allRegs);
+    
+    $attRes = db()->select('kehadiran', '?select=id,program_id,status,created_at');
+    $allAtts = $attRes['ok'] ? $attRes['data'] : [];
+    
+    // Total attendance = count of present ('Hadir') logs
+    $totalAtt = count(array_filter($allAtts, fn($a) => ($a['status'] ?? '') === 'Hadir'));
+    
+    $allCategories = categories()->listAll();
+}
+
+// 3. Compute starting date/timestamp for the selected period
+if ($period === 'weekly') {
+    // Monday of this week 00:00:00
+    $startTs = strtotime('monday this week 00:00:00');
+    $periodLabel = 'Minggu Ini (Weekly)';
+} elseif ($period === 'semester') {
+    // Current academic semester: Jan-Jun or Jul-Dec
+    $currentMonth = (int)date('n');
+    if ($currentMonth <= 6) {
+        $startTs = strtotime(date('Y-01-01 00:00:00'));
+    } else {
+        $startTs = strtotime(date('Y-07-01 00:00:00'));
+    }
+    $periodLabel = 'Semester Ini (Semester)';
+} else {
+    // Monthly: 1st of this month 00:00:00
+    $startTs = strtotime(date('Y-m-01 00:00:00'));
+    $periodLabel = 'Bulan Ini (Monthly)';
+}
+
+// 4. Filter data for the selected period
+$filteredPrograms = array_filter($allPrograms, fn($p) => isset($p['created_at']) && strtotime($p['created_at']) >= $startTs);
+$filteredRegs = array_filter($allRegs, fn($r) => isset($r['tarikh_daftar']) && strtotime($r['tarikh_daftar']) >= $startTs);
+$filteredAtts = array_filter($allAtts, fn($a) => isset($a['created_at']) && strtotime($a['created_at']) >= $startTs && ($a['status'] ?? '') === 'Hadir');
+
+$periodStats = [
+    'programs' => count($filteredPrograms),
+    'registrations' => count($filteredRegs),
+    'attendance' => count($filteredAtts),
+    'active_category' => 'Tiada Data'
 ];
+
+// 5. Calculate Most Active / Top Performing Category in the period
+// Defined as the category with the highest registrations in the period
+$categoryRegCounts = [];
+foreach ($allCategories as $cat) {
+    $categoryRegCounts[$cat['id']] = 0;
+}
+
+foreach ($filteredRegs as $r) {
+    $pId = $r['program_id'];
+    // Find the category for this program
+    foreach ($allPrograms as $p) {
+        if ($p['id'] == $pId) {
+            $catId = $p['kategori_id'] ?? null;
+            if ($catId && isset($categoryRegCounts[$catId])) {
+                $categoryRegCounts[$catId]++;
+            }
+            break;
+        }
+    }
+}
+
+if (!empty($categoryRegCounts)) {
+    arsort($categoryRegCounts);
+    $topCatId = key($categoryRegCounts);
+    $topCatCount = current($categoryRegCounts);
+    if ($topCatCount > 0) {
+        foreach ($allCategories as $cat) {
+            if ($cat['id'] == $topCatId) {
+                $periodStats['active_category'] = $cat['nama'] . ' (' . $topCatCount . ' pendaftaran)';
+                break;
+            }
+        }
+    }
+}
+
+// 6. Chart 1: Programs by Category in the period
+$chart1Data = [];
+foreach ($allCategories as $cat) {
+    $catId = $cat['id'];
+    $count = count(array_filter($filteredPrograms, fn($p) => ($p['kategori_id'] ?? null) == $catId));
+    $chart1Data[] = [
+        'label' => $cat['nama'],
+        'value' => $count
+    ];
+}
+
+// 7. Chart 2: Registrations Trend & Chart 3: Attendance Trend
+$chartLabels = [];
+$trendReg = [];
+$trendAtt = [];
+
+if ($period === 'weekly') {
+    $chartLabels = ['Isnin', 'Selasa', 'Rabu', 'Khamis', 'Jumaat', 'Sabtu', 'Ahad'];
+    $trendReg = array_fill(0, 7, 0);
+    $trendAtt = array_fill(0, 7, 0);
+    
+    for ($i = 0; $i < 7; $i++) {
+        $dayStart = $startTs + ($i * 86400);
+        $dayEnd = $dayStart + 86400;
+        
+        foreach ($filteredRegs as $r) {
+            $ts = strtotime($r['tarikh_daftar']);
+            if ($ts >= $dayStart && $ts < $dayEnd) {
+                $trendReg[$i]++;
+            }
+        }
+        foreach ($filteredAtts as $a) {
+            $ts = strtotime($a['created_at']);
+            if ($ts >= $dayStart && $ts < $dayEnd) {
+                $trendAtt[$i]++;
+            }
+        }
+    }
+} elseif ($period === 'monthly') {
+    $chartLabels = ['Minggu 1', 'Minggu 2', 'Minggu 3', 'Minggu 4'];
+    $trendReg = array_fill(0, 4, 0);
+    $trendAtt = array_fill(0, 4, 0);
+    
+    for ($i = 0; $i < 4; $i++) {
+        $weekStart = $startTs + ($i * 7 * 86400);
+        // Week 4 goes to end of month
+        $weekEnd = ($i === 3) ? strtotime('first day of next month 00:00:00', $startTs) : ($weekStart + (7 * 86400));
+        
+        foreach ($filteredRegs as $r) {
+            $ts = strtotime($r['tarikh_daftar']);
+            if ($ts >= $weekStart && $ts < $weekEnd) {
+                $trendReg[$i]++;
+            }
+        }
+        foreach ($filteredAtts as $a) {
+            $ts = strtotime($a['created_at']);
+            if ($ts >= $weekStart && $ts < $weekEnd) {
+                $trendAtt[$i]++;
+            }
+        }
+    }
+} else { // semester
+    $semesterMonths = [];
+    $currentMonth = (int)date('n');
+    if ($currentMonth <= 6) {
+        $semesterMonths = [1, 2, 3, 4, 5, 6];
+    } else {
+        $semesterMonths = [7, 8, 9, 10, 11, 12];
+    }
+    
+    $trendReg = array_fill(0, 6, 0);
+    $trendAtt = array_fill(0, 6, 0);
+    
+    $year = date('Y');
+    for ($i = 0; $i < 6; $i++) {
+        $m = $semesterMonths[$i];
+        $monthName = date('M', mktime(0, 0, 0, $m, 1));
+        $chartLabels[] = $monthName;
+        
+        $monthStart = strtotime("$year-$m-01 00:00:00");
+        $monthEnd = strtotime("+1 month", $monthStart);
+        
+        foreach ($filteredRegs as $r) {
+            $ts = strtotime($r['tarikh_daftar']);
+            if ($ts >= $monthStart && $ts < $monthEnd) {
+                $trendReg[$i]++;
+            }
+        }
+        foreach ($filteredAtts as $a) {
+            $ts = strtotime($a['created_at']);
+            if ($ts >= $monthStart && $ts < $monthEnd) {
+                $trendAtt[$i]++;
+            }
+        }
+    }
+}
+
+// Scaling calculations for HTML charts
+$maxCatVal = max(1, max(array_column($chart1Data, 'value')));
+$maxRegVal = max(1, max($trendReg));
+$maxAttVal = max(1, max($trendAtt));
 
 $menu = [
     'dashboard-pentadbir' => ['Dashboard', 'fa-house'],
@@ -82,242 +220,366 @@ $menu = [
     'logout' => ['Logout', 'fa-right-from-bracket']
 ];
 ?>
-
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Statistik Sistem | UKMInvolve</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--page:#f8fbff;--primary:#5b8def;--dark:#2563eb;--border:#dbeafe;--muted:#6b7280;--text:#111827;--orange:#f97316}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fbff;color:var(--text);height:100vh;overflow:hidden}
-a{text-decoration:none;color:inherit}
-button{font-family:inherit}
-
-.dashboard-wrapper{height:100vh;display:grid;grid-template-columns:240px 1fr;background:var(--page);overflow:hidden}
-.sidebar{height:100vh;background:#fff;border-right:1px solid var(--border);padding:28px 20px;display:flex;flex-direction:column;justify-content:space-between}
-.sidebar-header{display:flex;align-items:center;gap:12px;margin-bottom:30px}
-.sidebar-logo-wrap{width:38px;height:38px;border-radius:14px;background:#eaf4ff;display:flex;align-items:center;justify-content:center}
-.sidebar-logo{width:28px;height:28px;object-fit:contain}
-.sidebar-title{font-size:19px;font-weight:800}
-.sidebar-label{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;padding-left:8px}
-.sidebar-nav{display:flex;flex-direction:column;gap:8px}
-.sidebar-link{padding:11px 12px;border-radius:14px;display:flex;gap:12px;align-items:center;color:#374151;font-weight:500;transition:.25s}
-.sidebar-link i{width:18px;text-align:center}
-.sidebar-link.active,.sidebar-link:hover{background:#eff6ff;color:#2563eb;font-weight:700}
-.logout-link{color:#f97316}
-.logout-link:hover{background:#fff7ed;color:#f97316}
-.user-profile{display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid var(--border);border-radius:16px;padding:12px}
-.user-avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
-.user-profile h4{font-size:14px}
-.user-profile p{font-size:12px;color:var(--muted)}
-
-.main-section{height:100vh;overflow-y:auto;padding:28px;background:var(--page)}
-.main-section::-webkit-scrollbar{width:8px}
-.main-section::-webkit-scrollbar-thumb{background:#bfdbfe;border-radius:999px}
-
-.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
-.page-header h1{font-size:30px}
-.page-header p{font-size:14px;color:var(--muted);margin-top:4px}
-.btn-export{background:var(--primary);color:white;border:none;border-radius:999px;padding:12px 18px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:8px}
-
-.hero-card{background:linear-gradient(135deg,#7bb6ff,#5b8def);color:white;border-radius:26px;padding:26px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 18px 38px rgba(91,141,239,.20)}
-.hero-card h2{font-size:28px;margin-bottom:8px}
-.hero-card p{font-size:14px;color:#eef6ff}
-.hero-icon{width:80px;height:80px;border-radius:24px;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:36px}
-
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
-.stat-card{background:white;border:1px solid var(--border);border-radius:22px;padding:20px;box-shadow:0 8px 20px rgba(37,99,235,.06)}
-.stat-icon{width:46px;height:46px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:20px}
-.icon-blue{background:#eff6ff;color:#2563eb}
-.icon-green{background:#ecfdf5;color:#059669}
-.icon-orange{background:#fff7ed;color:#f97316}
-.icon-purple{background:#f5f3ff;color:#7c3aed}
-.stat-card h2{font-size:28px;margin-bottom:4px}
-.stat-card p{font-size:13px;color:var(--muted);font-weight:600}
-
-.dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
-.card{background:white;border:1px solid var(--border);border-radius:26px;padding:22px;box-shadow:0 8px 20px rgba(37,99,235,.06);margin-bottom:22px}
-.card h2{font-size:22px;margin-bottom:6px}
-.card-subtitle{font-size:13px;color:var(--muted);margin-bottom:18px}
-
-.bar-list{display:flex;flex-direction:column;gap:14px}
-.bar-item{display:grid;grid-template-columns:110px 1fr 45px;align-items:center;gap:12px}
-.bar-label{font-size:13px;font-weight:800}
-.bar-track{height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden}
-.bar-fill{height:100%;background:linear-gradient(90deg,#7bb6ff,#2563eb);border-radius:999px}
-.bar-value{text-align:right;font-size:13px;font-weight:800;color:var(--dark)}
-
-.program-list{display:flex;flex-direction:column;gap:12px}
-.program-item{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--border);border-radius:18px;padding:14px;background:#f8fbff}
-.program-name{font-weight:800;font-size:14px;margin-bottom:4px}
-.program-meta{font-size:12px;color:var(--muted)}
-.rating{color:#f59e0b;font-weight:800;font-size:13px;text-align:right}
-
-.metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.metric-card{background:#f8fbff;border:1px solid var(--border);border-radius:18px;padding:16px;text-align:center}
-.metric-card h3{font-size:24px;margin-bottom:4px}
-.metric-card p{font-size:13px;color:var(--muted)}
-.progress-track{height:8px;background:#e5e7eb;border-radius:999px;margin-top:10px;overflow:hidden}
-.progress-fill{height:100%;background:linear-gradient(90deg,#60a5fa,#2563eb);border-radius:999px}
-
-@media(max-width:1100px){.stats-grid,.metrics-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid{grid-template-columns:1fr}}
-@media(max-width:900px){
-body{overflow:auto}.dashboard-wrapper{grid-template-columns:1fr;height:auto}.sidebar{height:auto;position:relative;border-right:none;border-bottom:1px solid var(--border)}
-.sidebar-nav{flex-direction:row;overflow-x:auto}.sidebar-link{white-space:nowrap}.user-profile{display:none}.main-section{height:auto;overflow:visible}
-}
-@media(max-width:600px){.stats-grid,.metrics-grid{grid-template-columns:1fr}.page-header,.hero-card{flex-direction:column;align-items:flex-start;gap:12px}}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Analytics | UKMInvolve</title>
+    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        /* Period Metric Blocks */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .metric-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+        }
+        .metric-card h3 {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--accent-blue);
+            margin-bottom: 8px;
+            font-family: 'Outfit', sans-serif;
+        }
+        .metric-card p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .progress-track {
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #60a5fa, var(--accent-blue));
+            border-radius: 999px;
+        }
+        
+        .top-performing-card {
+            background: rgba(139, 92, 246, 0.05);
+            border: 1px solid rgba(139, 92, 246, 0.1);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+        .top-performing-text h4 {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            font-weight: 800;
+        }
+        .top-performing-text h3 {
+            font-size: 20px;
+            color: #7c3aed;
+            margin-top: 6px;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+        }
+        
+        /* Bar Graph Custom layouts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 32px;
+            margin-bottom: 40px;
+        }
+        .chart-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+        }
+        .chart-card h2 {
+            font-size: 18px;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+            margin-bottom: 4px;
+        }
+        .chart-card-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+        
+        .chart-wrapper {
+            height: 200px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            padding-top: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+        .chart-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            height: 100%;
+        }
+        .chart-bar {
+            border-radius: 6px 6px 0 0;
+            position: relative;
+            transition: var(--transition);
+            min-height: 2px;
+        }
+        .chart-bar-blue {
+            background: linear-gradient(180deg, #60a5fa, var(--accent-blue));
+        }
+        .chart-bar-blue:hover {
+            background: linear-gradient(180deg, #93c5fd, #1d4ed8);
+            transform: scaleX(1.05);
+        }
+        .chart-bar-orange {
+            background: linear-gradient(180deg, #f97316, var(--accent));
+        }
+        .chart-bar-orange:hover {
+            background: linear-gradient(180deg, #fb923c, #c2410c);
+            transform: scaleX(1.05);
+        }
+        .chart-bar-green {
+            background: linear-gradient(180deg, #34d399, #10b981);
+        }
+        .chart-bar-green:hover {
+            background: linear-gradient(180deg, #6ee7b7, #047857);
+            transform: scaleX(1.05);
+        }
+        .chart-value {
+            position: absolute;
+            top: -24px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+        .chart-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-bottom: 8px;
+        }
+    </style>
 </head>
-
 <body>
-<div class="dashboard-wrapper">
 
-<aside class="sidebar">
-    <div>
-        <div class="sidebar-header">
-            <div class="sidebar-logo-wrap"><img src="UKM.png" class="sidebar-logo" alt="UKM"></div>
-            <h3 class="sidebar-title">UKMInvolve</h3>
-        </div>
+    <!-- REUSABLE NAVBAR -->
+    <?php include_once __DIR__ . '/components/navbar.php'; ?>
 
-        <p class="sidebar-label">Menu</p>
-        <nav class="sidebar-nav">
-            <?php foreach ($menu as $page => $item): ?>
-                <a href="<?= $page ?>.php" class="sidebar-link <?= ($activePage === $page) ? 'active' : '' ?> <?= ($page === 'logout') ? 'logout-link' : '' ?>">
-                    <i class="fas <?= $item[1] ?>"></i><?= $item[0] ?>
-                </a>
-            <?php endforeach; ?>
-        </nav>
-    </div>
+    <main class="dashboard-section">
+        <div class="container">
+            <!-- HEADER -->
+            <div class="dashboard-header-container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+                <div class="dashboard-header-title">
+                    <h1>Reporting & System Analytics</h1>
+                    <p>Track student engagement, program creations, attendance ratios, and categories activity metrics.</p>
+                </div>
+                <button class="btn btn-primary" onclick="exportStatistics()" style="background-color: var(--accent-blue); color: var(--white); border: none; font-weight: 700; padding: 12px 24px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: var(--transition);">
+                    <i class="fas fa-download"></i> Export CSV Report
+                </button>
+            </div>
 
-    <div class="user-profile">
-        <div class="user-avatar">A</div>
-        <div><h4>Pentadbir</h4><p>Admin Account</p></div>
-    </div>
-</aside>
-
-<main class="main-section">
-
-    <div class="page-header">
-        <div>
-            <h1>System Statistics</h1>
-            <p>Simple overview of UKMInvolve performance and activity.</p>
-        </div>
-        <button class="btn-export" onclick="exportStatistics()">
-            <i class="fas fa-download"></i> Export
-        </button>
-    </div>
-
-    <div class="hero-card">
-        <div>
-            <h2>System Performance</h2>
-            <p>Monitor users, programmes, feedback and system engagement.</p>
-        </div>
-        <div class="hero-icon">
-            <i class="fas fa-chart-pie"></i>
-        </div>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon icon-blue"><i class="fas fa-users"></i></div>
-            <h2><?= number_format($stats['users']) ?></h2>
-            <p>Total Users</p>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon icon-green"><i class="fas fa-calendar-days"></i></div>
-            <h2><?= $stats['programs'] ?></h2>
-            <p>Total Programmes</p>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon icon-orange"><i class="fas fa-comments"></i></div>
-            <h2><?= number_format($stats['feedback']) ?></h2>
-            <p>Total Feedback</p>
-        </div>
-
-        <div class="stat-card">
-            <div class="stat-icon icon-purple"><i class="fas fa-user-check"></i></div>
-            <h2><?= $stats['attendance'] ?>%</h2>
-            <p>Attendance Rate</p>
-        </div>
-    </div>
-
-    <div class="dashboard-grid">
-        <div class="card">
-            <h2>Category Participation</h2>
-            <p class="card-subtitle">Participation percentage by category.</p>
-
-            <div class="bar-list">
-                <?php foreach ($categoryStats as $cat): ?>
-                    <div class="bar-item">
-                        <div class="bar-label"><?= $cat['name'] ?></div>
-                        <div class="bar-track">
-                            <div class="bar-fill" style="width:<?= $cat['value'] ?>%"></div>
-                        </div>
-                        <div class="bar-value"><?= $cat['value'] ?>%</div>
+            <!-- OVERALL STATS CARDS -->
+            <div class="stats-cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 32px;">
+                <div class="dashboard-stat-card">
+                    <div class="dashboard-stat-info">
+                        <h3>Total Users</h3>
+                        <div class="stat-val"><?= number_format($totalUsers) ?></div>
                     </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>Top Programmes</h2>
-            <p class="card-subtitle">Most popular programmes by participation.</p>
-
-            <div class="program-list">
-                <?php foreach ($topPrograms as $program): ?>
-                    <div class="program-item">
-                        <div>
-                            <div class="program-name"><?= $program['name'] ?></div>
-                            <div class="program-meta"><?= $program['participants'] ?> participants</div>
-                        </div>
-                        <div class="rating">
-                            <i class="fas fa-star"></i> <?= $program['rating'] ?>
-                        </div>
+                    <div class="dashboard-stat-icon stat-icon-blue">
+                        <i class="fas fa-users"></i>
                     </div>
-                <?php endforeach; ?>
+                </div>
+
+                <div class="dashboard-stat-card">
+                    <div class="dashboard-stat-info">
+                        <h3>Total Events</h3>
+                        <div class="stat-val"><?= number_format($totalPrograms) ?></div>
+                    </div>
+                    <div class="dashboard-stat-icon stat-icon-green">
+                        <i class="fas fa-calendar-days"></i>
+                    </div>
+                </div>
+
+                <div class="dashboard-stat-card">
+                    <div class="dashboard-stat-info">
+                        <h3>Total Registrations</h3>
+                        <div class="stat-val"><?= number_format($totalRegs) ?></div>
+                    </div>
+                    <div class="dashboard-stat-icon stat-icon-orange">
+                        <i class="fas fa-file-signature"></i>
+                    </div>
+                </div>
+
+                <div class="dashboard-stat-card">
+                    <div class="dashboard-stat-info">
+                        <h3>Total Attendance</h3>
+                        <div class="stat-val"><?= number_format($totalAtt) ?></div>
+                    </div>
+                    <div class="dashboard-stat-icon stat-icon-purple">
+                        <i class="fas fa-user-check"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB FILTERS -->
+            <div class="tab-nav-wrapper" style="margin-bottom: 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div style="font-size: 16px; font-weight: 700; color: var(--text-primary);">
+                    Filtering Period: <span style="color: var(--accent-blue); font-family: 'Outfit';"><?= $periodLabel ?></span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <a href="?period=weekly" class="tab-nav-btn <?= $period === 'weekly' ? 'active' : '' ?>" style="display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 20px; font-size: 14px; font-weight: 700; border-radius: 999px; transition: var(--transition);">Weekly</a>
+                    <a href="?period=monthly" class="tab-nav-btn <?= $period === 'monthly' ? 'active' : '' ?>" style="display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 20px; font-size: 14px; font-weight: 700; border-radius: 999px; transition: var(--transition);">Monthly</a>
+                    <a href="?period=semester" class="tab-nav-btn <?= $period === 'semester' ? 'active' : '' ?>" style="display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 20px; font-size: 14px; font-weight: 700; border-radius: 999px; transition: var(--transition);">Semester</a>
+                </div>
+            </div>
+
+            <!-- PERIOD STATS -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <h3><?= number_format($periodStats['programs']) ?></h3>
+                    <p>Programmes Created</p>
+                    <div class="progress-track"><div class="progress-fill" style="width:<?= min(100, $periodStats['programs'] * 10) ?>%"></div></div>
+                </div>
+
+                <div class="metric-card">
+                    <h3><?= number_format($periodStats['registrations']) ?></h3>
+                    <p>New Registrations</p>
+                    <div class="progress-track"><div class="progress-fill" style="width:<?= min(100, $periodStats['registrations'] * 5) ?>%"></div></div>
+                </div>
+
+                <div class="metric-card">
+                    <h3><?= number_format($periodStats['attendance']) ?></h3>
+                    <p>Attendance Verified</p>
+                    <div class="progress-track"><div class="progress-fill" style="width:<?= min(100, $periodStats['attendance'] * 5) ?>%"></div></div>
+                </div>
+            </div>
+
+            <!-- TOP PERFORMING CATEGORY CARD -->
+            <div class="top-performing-card">
+                <div class="top-performing-text">
+                    <h4>Most Active Programme Category (Selected Period)</h4>
+                    <h3><?= htmlspecialchars($periodStats['active_category']) ?></h3>
+                </div>
+                <div class="dashboard-stat-icon stat-icon-purple" style="background: rgba(139, 92, 246, 0.1); color: #7c3aed; margin-bottom: 0;">
+                    <i class="fas fa-fire"></i>
+                </div>
+            </div>
+
+            <!-- CHARTS GRID -->
+            <div class="charts-grid">
+                <!-- Chart 1: Programs by Category -->
+                <div class="chart-card">
+                    <h2>Programmes by Category</h2>
+                    <p class="chart-card-subtitle">Volume of programs created under each co-curricular category.</p>
+                    <div class="chart-wrapper">
+                        <?php foreach ($chart1Data as $c1):
+                            $height = round(($c1['value'] / $maxCatVal) * 130);
+                        ?>
+                            <div class="chart-item">
+                                <div class="chart-bar chart-bar-blue" style="height: <?= $height ?>px; width: 32px; margin: 0 auto;" title="<?= htmlspecialchars($c1['label']) ?>: <?= $c1['value'] ?>">
+                                    <span class="chart-value"><?= $c1['value'] ?></span>
+                                </div>
+                                <div class="chart-label" title="<?= htmlspecialchars($c1['label']) ?>"><?= htmlspecialchars($c1['label']) ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Registrations Trend -->
+                <div class="chart-card">
+                    <h2>Registrations Trend</h2>
+                    <p class="chart-card-subtitle">Student registration actions distribution over the selected period.</p>
+                    <div class="chart-wrapper">
+                        <?php for ($i = 0; $i < count($chartLabels); $i++):
+                            $label = $chartLabels[$i];
+                            $val = $trendReg[$i];
+                            $height = round(($val / $maxRegVal) * 130);
+                        ?>
+                            <div class="chart-item">
+                                <div class="chart-bar chart-bar-orange" style="height: <?= $height ?>px; width: 28px; margin: 0 auto;" title="<?= htmlspecialchars($label) ?>: <?= $val ?>">
+                                    <span class="chart-value"><?= $val ?></span>
+                                </div>
+                                <div class="chart-label"><?= htmlspecialchars($label) ?></div>
+                            </div>
+                        <?php endfor; ?>
+                    </div>
+                </div>
+
+                <!-- Chart 3: Attendance Trend -->
+                <div class="chart-card">
+                    <h2>Verified Attendance Trend</h2>
+                    <p class="chart-card-subtitle">Count of students who completed attendance check-in.</p>
+                    <div class="chart-wrapper">
+                        <?php for ($i = 0; $i < count($chartLabels); $i++):
+                            $label = $chartLabels[$i];
+                            $val = $trendAtt[$i];
+                            $height = round(($val / $maxAttVal) * 130);
+                        ?>
+                            <div class="chart-item">
+                                <div class="chart-bar chart-bar-green" style="height: <?= $height ?>px; width: 28px; margin: 0 auto;" title="<?= htmlspecialchars($label) ?>: <?= $val ?>">
+                                    <span class="chart-value"><?= $val ?></span>
+                                </div>
+                                <div class="chart-label"><?= htmlspecialchars($label) ?></div>
+                            </div>
+                        <?php endfor; ?>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+    </main>
 
-    <div class="card">
-        <h2>System Metrics</h2>
-        <p class="card-subtitle">Basic system health and usage indicators.</p>
+    <!-- REUSABLE FOOTER -->
+    <?php include_once __DIR__ . '/components/footer.php'; ?>
 
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <h3><?= $stats['rating'] ?>/5</h3>
-                <p>Average Rating</p>
-                <div class="progress-track"><div class="progress-fill" style="width:<?= $stats['rating'] * 20 ?>%"></div></div>
-            </div>
-
-            <div class="metric-card">
-                <h3><?= $stats['attendance'] ?>%</h3>
-                <p>Attendance Rate</p>
-                <div class="progress-track"><div class="progress-fill" style="width:<?= $stats['attendance'] ?>%"></div></div>
-            </div>
-
-            <div class="metric-card">
-                <h3><?= $stats['active_sessions'] ?></h3>
-                <p>Active Sessions</p>
-                <div class="progress-track"><div class="progress-fill" style="width:<?= min(100, $stats['active_sessions'] / 2) ?>%"></div></div>
-            </div>
-        </div>
-    </div>
-
-</main>
-</div>
-
-<script>
-function exportStatistics() {
-    alert('Statistics exported successfully.');
-}
-</script>
-
+    <script>
+    function exportStatistics() {
+        const period = <?= json_encode($period) ?>;
+        const stats = <?= json_encode([
+            'totalUsers' => $totalUsers,
+            'totalPrograms' => $totalPrograms,
+            'totalRegistrations' => $totalRegs,
+            'totalAttendance' => $totalAtt,
+            'periodPrograms' => $periodStats['programs'],
+            'periodRegistrations' => $periodStats['registrations'],
+            'periodAttendance' => $periodStats['attendance'],
+            'activeCategory' => $periodStats['active_category']
+        ]) ?>;
+        
+        let csv = "Indicator,Value\n";
+        for(let k in stats){
+            csv += `"${k}","${stats[k]}"\n`;
+        }
+        
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `system_analytics_report_${period}.csv`;
+        link.click();
+    }
+    </script>
 </body>
 </html>

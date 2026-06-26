@@ -14,11 +14,12 @@ if (!Database::isConfigured()) {
 }
 
 $db = new SupabaseClient();
-$tables = ['users', 'kategori', 'program', 'pendaftaran'];
+$tables = ['users', 'kategori', 'program', 'pendaftaran', 'student_interests', 'kehadiran', 'level_thresholds', 'rekod_mata', 'lencana', 'lencana_pelajar'];
 $results = [];
 
 foreach ($tables as $table) {
-    $r = $db->select($table, '?select=id&limit=1');
+    $select = ($table === 'level_thresholds') ? 'level' : 'id';
+    $r = $db->select($table, '?select=' . $select . '&limit=1');
     $results[$table] = [
         'exists' => $r['ok'],
         'error' => $r['ok'] ? null : ($r['error'] ?? 'unknown'),

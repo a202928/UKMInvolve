@@ -109,172 +109,138 @@ $adminCount      = count(array_filter($activities, fn($a) => $a['type'] === 'adm
 $userRoles = array_values(array_unique(array_column($activities, 'user_role')));
 sort($userRoles);
 ?>
-
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pemantauan Aktiviti | UKMInvolve</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Activity Monitoring | UKMInvolve</title>
+    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
-        /* Activity Log Styling */
-        .activity-container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
         .activity-card {
-            background: var(--surface);
-            border-radius: var(--radius);
+            background: var(--white);
+            border-radius: var(--radius-md);
             padding: 24px;
-            box-shadow: var(--shadow);
+            box-shadow: var(--shadow-sm);
             border: 1px solid var(--border);
-            transition: all 0.3s ease;
+            transition: var(--transition);
         }
-        
+        .activity-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
         .activity-card.warning {
             border-left: 4px solid #ef4444;
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.05), rgba(239, 68, 68, 0.02));
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.02), rgba(239, 68, 68, 0.005));
         }
-        
         .activity-card.admin {
             border-left: 4px solid #8b5cf6;
-            background: linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(139, 92, 246, 0.02));
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.02), rgba(139, 92, 246, 0.005));
         }
-        
         .activity-card.normal {
-            border-left: 4px solid var(--primary);
+            border-left: 4px solid var(--accent-blue);
         }
-        
         .activity-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 12px;
         }
-        
         .activity-content {
             display: flex;
             align-items: flex-start;
-            gap: 12px;
+            gap: 16px;
         }
-        
         .activity-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 20px;
+            flex-shrink: 0;
         }
-        
         .icon-warning { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
         .icon-admin { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-        .icon-normal { background: rgba(37, 99, 235, 0.1); color: var(--primary); }
-        
+        .icon-normal { background: rgba(37, 99, 235, 0.1); color: var(--accent-blue); }
         .activity-info {
             flex: 1;
         }
-        
         .activity-title {
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-primary);
             margin-bottom: 4px;
+            font-family: 'Outfit', sans-serif;
         }
-        
         .activity-details {
             font-size: 14px;
             color: var(--text-secondary);
-            margin-bottom: 8px;
+            margin-bottom: 12px;
         }
-        
         .activity-meta {
             display: flex;
             flex-wrap: wrap;
             gap: 20px;
-            font-size: 12px;
-            color: var(--text-tertiary);
+            font-size: 13px;
+            color: var(--text-secondary);
         }
-        
         .meta-item {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
         }
-        
-        /* Status Badges */
+        .meta-item i {
+            color: var(--accent-blue);
+        }
         .status-badge {
             padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
         }
-        
-        .badge-warning {
-            background: rgba(239, 68, 68, 0.1);
-            color: #ef4444;
-        }
-        
-        .badge-admin {
-            background: rgba(139, 92, 246, 0.1);
-            color: #8b5cf6;
-        }
-        
-        .badge-normal {
-            background: rgba(37, 99, 235, 0.1);
-            color: var(--primary);
-        }
-        
-        /* Filter Section */
+        .badge-warning { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .badge-admin { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
+        .badge-normal { background: rgba(37, 99, 235, 0.1); color: var(--accent-blue); }
         .filter-section {
-            background: var(--surface);
-            border-radius: var(--radius);
+            background: var(--white);
+            border-radius: var(--radius-md);
             padding: 24px;
-            box-shadow: var(--shadow);
+            box-shadow: var(--shadow-sm);
             border: 1px solid var(--border);
-            margin-bottom: 24px;
+            margin-bottom: 32px;
         }
-        
         .filter-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
+            gap: 20px;
         }
-        
         .filter-group {
             display: flex;
             flex-direction: column;
             gap: 8px;
         }
-        
         .filter-label {
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-primary);
             font-size: 14px;
         }
-        
         .filter-select, .filter-input {
             padding: 12px 16px;
-            border: 2px solid var(--border);
+            border: 1px solid var(--border);
             border-radius: 8px;
             font-size: 14px;
-            background: var(--surface);
-            transition: border-color 0.2s ease;
-        }
-        
-        .filter-select:focus, .filter-input:focus {
+            background: var(--white);
             outline: none;
-            border-color: var(--primary);
+            transition: var(--transition);
+            width: 100%;
         }
-        
-        .filter-input {
-            position: relative;
+        .filter-select:focus, .filter-input:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
         }
-        
         .search-icon {
             position: absolute;
             left: 16px;
@@ -282,121 +248,33 @@ sort($userRoles);
             transform: translateY(-50%);
             color: var(--text-secondary);
         }
-        
         .filter-actions {
             display: flex;
             gap: 12px;
             align-items: flex-end;
         }
-        
-        /* Stats Cards */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 24px 0;
-        }
-        
-        .stat-card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 24px;
-            text-align: center;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border);
-            transition: all 0.3s ease;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow);
-        }
-        
-        .stat-value {
-            font-size: 36px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-        
-        .stat-value.total { color: var(--primary); }
-        .stat-value.normal { color: #10b981; }
-        .stat-value.warning { color: #ef4444; }
-        .stat-value.admin { color: #8b5cf6; }
-        
-        .stat-label {
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-        
-        /* Empty State */
         .empty-state {
             text-align: center;
             padding: 60px 20px;
-            background: var(--surface);
-            border-radius: var(--radius);
+            background: var(--white);
+            border-radius: var(--radius-md);
             border: 1px solid var(--border);
         }
-        
         .empty-state-icon {
             font-size: 48px;
-            color: var(--text-tertiary);
+            color: var(--text-muted);
             margin-bottom: 16px;
         }
-        
         .empty-state h3 {
             font-size: 20px;
             color: var(--text-primary);
             margin-bottom: 8px;
         }
-        
         .empty-state p {
             color: var(--text-secondary);
             max-width: 400px;
             margin: 0 auto 20px;
         }
-        
-        /* Export Button */
-        .export-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
-            background: transparent;
-            border: 2px solid var(--primary);
-            color: var(--primary);
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .export-btn:hover {
-            background: rgba(37, 99, 235, 0.1);
-        }
-        
-        /* Action Buttons */
-        .action-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
-            background: var(--primary);
-            border: none;
-            color: white;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .action-btn:hover {
-            background: var(--primary-dark);
-            transform: translateY(-1px);
-        }
-        
-        /* Activity List */
         .activities-list {
             display: flex;
             flex-direction: column;
@@ -407,41 +285,56 @@ sort($userRoles);
 </head>
 <body>
 
-<div class="app-layout">
-    <!-- SIDEBAR -->
-    <?php include 'sidebar.php'; ?>
+    <!-- REUSABLE NAVBAR -->
+    <?php include_once __DIR__ . '/components/navbar.php'; ?>
 
-    <!-- MAIN CONTENT -->
-    <main class="main-content">
-        <!-- TOP BAR -->
-<header class="topbar"></header>
-
-
-        <!-- PAGE CONTENT -->
-        <section class="content">
-            <!-- Header Section -->
-            <div class="welcome-section">
-                <h1 class="page-title">Pemantauan Aktiviti</h1>
-                <p class="page-subtitle">Pantau semua aktiviti dan tindakan pengguna dalam sistem</p>
+    <main class="dashboard-section">
+        <div class="container">
+            <!-- HEADER -->
+            <div class="dashboard-header-container">
+                <div class="dashboard-header-title">
+                    <h1>Activity Monitoring</h1>
+                    <p>Track all system logs, events creation, user registrations, and administrative updates.</p>
+                </div>
             </div>
 
             <!-- Statistics -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value total"><?= $totalActivities ?></div>
-                    <div class="stat-label">Jumlah Aktiviti</div>
+            <div class="stats-cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 32px;">
+                <div class="dashboard-stat-card">
+                    <div class="dashboard-stat-info">
+                        <h3>Total Logs</h3>
+                        <div class="stat-val" style="color: var(--accent-blue);"><?= $totalActivities ?></div>
+                    </div>
+                    <div class="dashboard-stat-icon stat-icon-blue">
+                        <i class="fas fa-history"></i>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value normal"><?= $normalCount ?></div>
-                    <div class="stat-label">Aktiviti Normal</div>
+                <div class="dashboard-stat-card">
+                    <div class="dashboard-stat-info">
+                        <h3>Normal Activities</h3>
+                        <div class="stat-val" style="color: #10b981;"><?= $normalCount ?></div>
+                    </div>
+                    <div class="dashboard-stat-icon stat-icon-green">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value warning"><?= $warningCount ?></div>
-                    <div class="stat-label">Amaran Sistem</div>
+                <div class="dashboard-stat-card">
+                    <div class="dashboard-stat-info">
+                        <h3>Warnings</h3>
+                        <div class="stat-val" style="color: #ef4444;"><?= $warningCount ?></div>
+                    </div>
+                    <div class="dashboard-stat-icon stat-icon-orange">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value admin"><?= $adminCount ?></div>
-                    <div class="stat-label">Tindakan Admin</div>
+                <div class="dashboard-stat-card">
+                    <div class="dashboard-stat-info">
+                        <h3>Admin Actions</h3>
+                        <div class="stat-val" style="color: #8b5cf6;"><?= $adminCount ?></div>
+                    </div>
+                    <div class="dashboard-stat-icon stat-icon-purple">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
                 </div>
             </div>
 
@@ -449,35 +342,35 @@ sort($userRoles);
             <div class="filter-section">
                 <form method="GET" class="filter-grid">
                     <!-- Search -->
-                    <div class="filter-group">
-                        <label class="filter-label">Cari Aktiviti</label>
+                    <div class="filter-group" style="grid-column: span 2;">
+                        <label class="filter-label">Search Activity</label>
                         <div style="position: relative;">
                             <i class="fas fa-search search-icon"></i>
                             <input type="text" 
                                    name="search" 
                                    class="filter-input" 
-                                   style="padding-left: 44px; width: 100%;"
-                                   placeholder="Cari pengguna, tindakan, IP..."
+                                   style="padding-left: 44px;"
+                                   placeholder="Search user, action, details..."
                                    value="<?= htmlspecialchars($searchQuery) ?>">
                         </div>
                     </div>
 
                     <!-- Type Filter -->
                     <div class="filter-group">
-                        <label class="filter-label">Jenis Aktiviti</label>
+                        <label class="filter-label">Activity Type</label>
                         <select name="type" class="filter-select" onchange="this.form.submit()">
-                            <option value="semua" <?= $filterType === 'semua' ? 'selected' : '' ?>>Semua Jenis</option>
+                            <option value="semua" <?= $filterType === 'semua' ? 'selected' : '' ?>>All Types</option>
                             <option value="normal" <?= $filterType === 'normal' ? 'selected' : '' ?>>Normal</option>
                             <option value="admin" <?= $filterType === 'admin' ? 'selected' : '' ?>>Admin</option>
-                            <option value="warning" <?= $filterType === 'warning' ? 'selected' : '' ?>>Amaran</option>
+                            <option value="warning" <?= $filterType === 'warning' ? 'selected' : '' ?>>Warning</option>
                         </select>
                     </div>
 
                     <!-- Role Filter -->
                     <div class="filter-group">
-                        <label class="filter-label">Peranan Pengguna</label>
+                        <label class="filter-label">User Role</label>
                         <select name="role" class="filter-select" onchange="this.form.submit()">
-                            <option value="semua" <?= $filterRole === 'semua' ? 'selected' : '' ?>>Semua Peranan</option>
+                            <option value="semua" <?= $filterRole === 'semua' ? 'selected' : '' ?>>All Roles</option>
                             <?php foreach ($userRoles as $role): ?>
                                 <option value="<?= htmlspecialchars($role) ?>" <?= $filterRole === $role ? 'selected' : '' ?>>
                                     <?= htmlspecialchars($role) ?>
@@ -488,25 +381,25 @@ sort($userRoles);
 
                     <!-- Action Buttons -->
                     <div class="filter-actions">
-                        <button type="submit" class="action-btn">
-                            <i class="fas fa-filter"></i> Tapis
+                        <button type="submit" class="btn btn-primary" style="background-color: var(--accent-blue); color: var(--white); font-weight: 700; height: 46px; padding: 0 24px; border-radius: 8px; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: var(--transition);">
+                            <i class="fas fa-filter"></i> Filter
                         </button>
-                        <button type="button" class="export-btn" onclick="exportLogs()">
-                            <i class="fas fa-download"></i> Eksport
+                        <button type="button" class="btn btn-secondary" onclick="exportLogs()" style="background-color: var(--white); color: var(--text-primary); border: 1px solid var(--border); font-weight: 700; height: 46px; padding: 0 24px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: var(--transition);">
+                            <i class="fas fa-download"></i> Export
                         </button>
                     </div>
                 </form>
             </div>
 
-            <!-- Activity Log -->
-            <div class="activity-container">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h2 style="font-size: 20px; font-weight: 700; color: var(--text-primary);">
-                        <i class="fas fa-history" style="margin-right: 8px;"></i>
-                        Log Aktiviti Sistem
+            <!-- Activity Log List -->
+            <div class="dashboard-card-wrap">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+                    <h2 style="font-size: 20px; font-weight: 800; color: var(--primary); font-family: 'Outfit', sans-serif;">
+                        <i class="fas fa-history" style="margin-right: 8px; color: var(--accent-blue);"></i>
+                        System Activity Logs
                     </h2>
-                    <span style="color: var(--text-secondary); font-size: 14px;">
-                        <?= count($filteredActivities) ?> aktiviti ditemui
+                    <span style="color: var(--text-secondary); font-size: 14px; font-weight: 600;">
+                        <?= count($filteredActivities) ?> activities found
                     </span>
                 </div>
 
@@ -550,7 +443,7 @@ sort($userRoles);
                                         </div>
                                     </div>
                                     <span class="status-badge <?= $badgeClass ?>">
-                                        <?= $activity['type'] === 'warning' ? 'Amaran' : 
+                                        <?= $activity['type'] === 'warning' ? 'Warning' : 
                                            ($activity['type'] === 'admin' ? 'Admin' : 'Normal') ?>
                                     </span>
                                 </div>
@@ -563,104 +456,90 @@ sort($userRoles);
                         <div class="empty-state-icon">
                             <i class="fas fa-search"></i>
                         </div>
-                        <h3>Tiada Aktiviti Dijumpai</h3>
-                        <p>Tidak ada aktiviti yang sepadan dengan tapisan anda. Cuba ubah tetapan tapisan.</p>
-                        <a href="?" class="action-btn" style="display: inline-block; text-decoration: none;">
-                            <i class="fas fa-redo"></i> Reset Tapisan
+                        <h3>No Logs Found</h3>
+                        <p>No activity logs match your filter criteria. Try adjusting the search or category filter.</p>
+                        <a href="?" class="btn btn-primary" style="display: inline-flex; text-decoration: none; background-color: var(--accent-blue); color: var(--white); font-weight: 700; padding: 12px 24px; border-radius: 8px; align-items: center; gap: 8px;">
+                            <i class="fas fa-redo"></i> Reset Filter
                         </a>
                     </div>
                 <?php endif; ?>
             </div>
-
-        </section>
+        </div>
     </main>
-</div>
 
-<script>
-    // Export logs function
-    function exportLogs() {
-        // In real app, generate and download CSV/Excel file
-        const activities = <?= json_encode($filteredActivities) ?>;
-        
-        // Convert to CSV
-        const csvContent = "data:text/csv;charset=utf-8," 
-            + "Masa,Tindakan,Butiran,Pengguna,Peranan,IP,Jenis\n"
-            + activities.map(activity => 
-                `"${activity.timestamp}","${activity.action}","${activity.details}","${activity.user}","${activity.user_role}","${activity.ip}","${activity.type}"`
-            ).join("\n");
-        
-        // Create download link
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "log_aktiviti_<?= date('Y-m-d') ?>.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    <!-- REUSABLE FOOTER -->
+    <?php include_once __DIR__ . '/components/footer.php'; ?>
+
+    <script>
+        // Export logs function
+        function exportLogs() {
+            const activities = <?= json_encode($filteredActivities) ?>;
+            
+            // Convert to CSV
+            const csvContent = "data:text/csv;charset=utf-8," 
+                + "Timestamp,Action,Details,User,Role,IP,Type\n"
+                + activities.map(activity => 
+                    `"${activity.timestamp}","${activity.action}","${activity.details}","${activity.user}","${activity.user_role}","${activity.ip}","${activity.type}"`
+                ).join("\n");
+            
+            // Create download link
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "system_activity_logs_<?= date('Y-m-d') ?>.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Show notification
+            showNotification('Activity logs exported to CSV successfully');
+        }
         
         // Show notification
-        showNotification('Log aktiviti telah dieksport ke CSV');
-    }
-    
-    // Auto refresh activity log (optional)
-    function autoRefreshLogs() {
-        // In real app, you might want to periodically check for new activities
-        // setTimeout(() => {
-        //     window.location.reload();
-        // }, 30000); // Refresh every 30 seconds
-    }
-    
-    // Show notification
-    function showNotification(message) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--primary);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            box-shadow: var(--shadow-lg);
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        `;
-        notification.innerHTML = `
-            <i class="fas fa-check-circle"></i>
-            <span>${message}</span>
-        `;
-        document.body.appendChild(notification);
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: var(--accent-blue);
+                color: white;
+                padding: 12px 24px;
+                border-radius: 8px;
+                box-shadow: var(--shadow-lg);
+                z-index: 1000;
+                animation: slideIn 0.3s ease;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            `;
+            notification.innerHTML = `
+                <i class="fas fa-check-circle"></i>
+                <span>${message}</span>
+            `;
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
         
-        // Remove after 3 seconds
-        setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
-    }
-    
-    // Add animation styles
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
-    
-    // Initialize auto-refresh
-    document.addEventListener('DOMContentLoaded', function() {
-        autoRefreshLogs();
-    });
-</script>
-
+        // Add animation styles
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
 </body>
 </html>

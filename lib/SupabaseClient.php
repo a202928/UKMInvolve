@@ -39,6 +39,11 @@ class SupabaseClient
         return $this->request('PATCH', $table, $query, $data, ['Prefer: return=representation']);
     }
 
+    public function delete(string $table, string $query): array
+    {
+        return $this->request('DELETE', $table, $query, null);
+    }
+
     public function rpc(string $function, array $params = []): array
     {
         return $this->request('POST', 'rpc/' . $function, '', $params);
@@ -74,7 +79,7 @@ class SupabaseClient
             CURLOPT_CUSTOMREQUEST  => $method,
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_TIMEOUT        => 30,
-            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
         ]);
 
         if ($body !== null) {

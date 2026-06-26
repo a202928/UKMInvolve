@@ -4,19 +4,93 @@ require_once __DIR__ . '/lib/bootstrap.php';
 requireRole('pelajar');
 $activePage = 'rekod-penyertaan';
 
+$studentId = $_SESSION['user_id'] ?? '';
 $records = [];
-if (db()->isConfigured() && !empty($_SESSION['user_id'])) {
-    foreach (registrations()->listByStudent($_SESSION['user_id']) as $row) {
-        $records[] = registrations()->toHistoryRow($row);
+$upcomingRecords = [];
+$pastRecords = [];
+
+if (db()->isConfigured() && $studentId) {
+    // Fetch registrations
+    $registrationsList = registrations()->listByStudent($studentId);
+    
+    // Fetch attendance records
+    $attendanceList = db()->select('kehadiran', '?pelajar_id=eq.' . rawurlencode($studentId));
+    $attendanceMap = [];
+    if ($attendanceList['ok']) {
+        foreach ($attendanceList['data'] as $att) {
+            $attendanceMap[$att['program_id']] = $att['status'];
+        }
+    }
+
+    // Fetch feedback records
+    $feedbackList = db()->select('maklum_balas', '?pelajar_id=eq.' . rawurlencode($studentId));
+    $feedbackMap = [];
+    if ($feedbackList['ok'] && is_array($feedbackList['data'])) {
+        foreach ($feedbackList['data'] as $fb) {
+            $feedbackMap[$fb['program_id']] = true;
+        }
+    }
+
+    // Fetch rekod_mata records for the student
+    $rekodMataList = db()->select('rekod_mata', '?student_id=eq.' . rawurlencode($studentId));
+    $pointsMap = [];
+    if ($rekodMataList['ok'] && is_array($rekodMataList['data'])) {
+        foreach ($rekodMataList['data'] as $rm) {
+            $pId = $rm['program_id'];
+            if ($pId !== null) {
+                $pointsMap[$pId] = ($pointsMap[$pId] ?? 0) + (int)$rm['points'];
+            }
+        }
+    }
+    
+    $today = date('Y-m-d');
+    
+    foreach ($registrationsList as $row) {
+        $historyRow = registrations()->toHistoryRow($row);
+        $historyRow['program_id'] = $row['program_id'];
+        $hasFeedback = isset($feedbackMap[$row['program_id']]);
+        $historyRow['feedback'] = $hasFeedback;
+        
+        // Map attendance status
+        $progId = $row['program_id'];
+        $regStatus = $row['status'] ?? 'Registered';
+        
+        if ($regStatus === 'Cancelled' || ($row['program']['status'] ?? '') === 'Cancelled') {
+            $historyRow['status_display'] = 'Cancelled';
+            $historyRow['points'] = 0;
+        } else {
+            $attendanceStatus = $attendanceMap[$progId] ?? null;
+            if ($attendanceStatus === 'Hadir') {
+                $historyRow['status_display'] = 'Attended';
+            } elseif ($attendanceStatus === 'Tidak Hadir') {
+                $historyRow['status_display'] = 'Absent';
+            } else {
+                $historyRow['status_display'] = 'Registered';
+            }
+            $historyRow['points'] = $pointsMap[$progId] ?? 0;
+        }
+        
+        // Role (jenis_pendaftaran)
+        $historyRow['role'] = ($row['jenis_pendaftaran'] ?? 'Peserta') === 'Peserta' ? 'Participant' : ($row['jenis_pendaftaran'] ?? 'Participant');
+        $historyRow['is_completed'] = isProgramCompleted($row['program'] ?? []);
+        
+        $records[] = $historyRow;
+        
+        // Split by completion
+        if (!$historyRow['is_completed']) {
+            $upcomingRecords[] = $historyRow;
+        } else {
+            $pastRecords[] = $historyRow;
+        }
     }
 }
 
 $totalProgram = count($records);
-$studentInitial = strtoupper(substr($_SESSION['nama'] ?? 'P', 0, 1));
-$totalHadir = count(array_filter($records, fn($r) => $r['status'] === 'Hadir'));
-$totalFeedback = count(array_filter($records, fn($r) => $r['feedback']));
+$studentInitial = strtoupper(substr($_SESSION['nama'] ?? 'S', 0, 1));
+$totalHadir = count(array_filter($records, fn($r) => $r['status_display'] === 'Attended'));
 $totalPoints = array_sum(array_column($records, 'points'));
-$attendanceRate = $totalProgram > 0 ? round(($totalHadir / $totalProgram) * 100) : 0;
+$completedCount = count($pastRecords);
+$attendanceRate = $completedCount > 0 ? round(($totalHadir / $completedCount) * 100) : 0;
 
 $menu = [
     'dashboard_pelajar' => ['Home', 'fa-house'],
@@ -28,281 +102,251 @@ $menu = [
 ?>
 
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>History | UKMInvolve</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{
-    --page:#f8fbff;--primary:#5b8def;--dark:#2563eb;--border:#dbeafe;
-    --muted:#6b7280;--text:#111827;--green:#10b981;--red:#ef4444;
-    --orange:#f97316;--purple:#8b5cf6;
-}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fbff;color:var(--text);height:100vh;overflow:hidden}
-a{text-decoration:none;color:inherit}
-button,input{font-family:inherit}
-
-.dashboard-wrapper{height:100vh;display:grid;grid-template-columns:240px 1fr;background:var(--page);overflow:hidden}
-
-/* SIDEBAR */
-.sidebar{height:100vh;background:#fff;border-right:1px solid var(--border);padding:28px 20px;display:flex;flex-direction:column;justify-content:space-between}
-.sidebar-header{display:flex;align-items:center;gap:12px;margin-bottom:30px}
-.sidebar-logo-wrap{width:38px;height:38px;border-radius:14px;background:#eaf4ff;display:flex;align-items:center;justify-content:center}
-.sidebar-logo{width:28px;height:28px;object-fit:contain}
-.sidebar-title{font-size:19px;font-weight:800}
-.sidebar-label{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;padding-left:8px}
-.sidebar-nav{display:flex;flex-direction:column;gap:8px}
-.sidebar-link{padding:11px 12px;border-radius:14px;display:flex;gap:12px;align-items:center;color:#374151;font-weight:500;transition:.25s}
-.sidebar-link i{width:18px;text-align:center}
-.sidebar-link.active,.sidebar-link:hover{background:#eff6ff;color:#2563eb;font-weight:700}
-.logout-link{color:#f97316}
-.logout-link:hover{background:#fff7ed;color:#f97316}
-.user-profile{display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid var(--border);border-radius:16px;padding:12px}
-.user-avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
-.user-profile h4{font-size:14px}
-.user-profile p{font-size:12px;color:var(--muted)}
-
-/* MAIN */
-.main-section{height:100vh;overflow-y:auto;padding:28px;background:var(--page)}
-.main-section::-webkit-scrollbar{width:8px}
-.main-section::-webkit-scrollbar-thumb{background:#bfdbfe;border-radius:999px}
-
-.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
-.page-header h1{font-size:30px}
-.page-header p{color:var(--muted);font-size:14px;margin-top:4px}
-
-.search-row{display:flex;gap:12px;margin-bottom:22px}
-.search-box{flex:1;background:white;border:1px solid var(--border);border-radius:999px;padding:14px 18px;display:flex;align-items:center;gap:10px}
-.search-box input{border:none;outline:none;background:transparent;width:100%;font-size:14px}
-.search-box i{color:#9ca3af}
-
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
-.stat-card{border-radius:22px;padding:18px;color:white;box-shadow:0 10px 25px rgba(37,99,235,.10)}
-.stat-card h2{font-size:28px;margin-bottom:4px}
-.stat-card p{font-size:13px;color:rgba(255,255,255,.9)}
-.stat-blue{background:linear-gradient(135deg,#60a5fa,#2563eb)}
-.stat-green{background:linear-gradient(135deg,#34d399,#059669)}
-.stat-orange{background:linear-gradient(135deg,#fbbf24,#f97316)}
-.stat-purple{background:linear-gradient(135deg,#a78bfa,#7c3aed)}
-
-.filter-section{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
-.filter-btn{border:1px solid var(--border);background:white;color:#374151;padding:9px 15px;border-radius:999px;font-weight:700;cursor:pointer}
-.filter-btn:hover,.filter-btn.active{background:var(--primary);color:white;border-color:var(--primary)}
-
-.history-card{background:white;border:1px solid var(--border);border-radius:26px;padding:22px;box-shadow:0 8px 20px rgba(37,99,235,.06)}
-.history-card h2{font-size:22px;margin-bottom:16px}
-
-.record-list{display:flex;flex-direction:column;gap:14px}
-.record-card{border:1px solid var(--border);border-radius:20px;padding:18px;background:#fff;transition:.25s}
-.record-card:hover{transform:translateY(-3px);box-shadow:0 12px 25px rgba(37,99,235,.10)}
-.record-header{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px}
-.program-title{font-size:18px;font-weight:800;margin-bottom:8px}
-.category-tag{display:inline-flex;background:#eff6ff;color:#2563eb;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:800}
-.status-badge{padding:7px 13px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}
-.status-present{background:#ecfdf5;color:#059669}
-.status-absent{background:#fef2f2;color:#dc2626}
-
-.record-meta{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin:12px 0}
-.record-meta i{color:var(--dark);margin-right:6px}
-
-.record-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px}
-.points-pill{background:#eff6ff;color:#2563eb;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:800}
-.feedback-btn{border:1px solid var(--primary);background:white;color:var(--primary);padding:9px 14px;border-radius:999px;font-size:13px;font-weight:800}
-.feedback-done{background:#ecfdf5;color:#059669;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:800}
-.feedback-na{color:var(--muted);font-size:13px}
-
-.empty-state{text-align:center;padding:42px;background:#fff;border:1px solid var(--border);border-radius:22px;color:var(--muted)}
-.empty-state i{font-size:42px;color:#bfdbfe;margin-bottom:12px}
-.empty-state h3{color:var(--text);margin-bottom:6px}
-
-@media(max-width:900px){
-    body{overflow:auto}
-    .dashboard-wrapper{grid-template-columns:1fr;height:auto}
-    .sidebar{height:auto;position:relative;border-right:none;border-bottom:1px solid var(--border)}
-    .sidebar-nav{flex-direction:row;overflow-x:auto}
-    .sidebar-link{white-space:nowrap}
-    .user-profile{display:none}
-    .main-section{height:auto;overflow:visible}
-    .stats-grid{grid-template-columns:1fr 1fr}
-}
-@media(max-width:600px){
-    .stats-grid{grid-template-columns:1fr}
-    .page-header{flex-direction:column;align-items:flex-start;gap:10px}
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History | UKMInvolve</title>
+    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-
 <body>
-<div class="dashboard-wrapper">
 
-<aside class="sidebar">
-    <div>
-        <div class="sidebar-header">
-            <div class="sidebar-logo-wrap">
-                <img src="UKM.png" class="sidebar-logo" alt="UKM">
-            </div>
-            <h3 class="sidebar-title">UKMInvolve</h3>
-        </div>
+    <!-- REUSABLE NAVBAR -->
+    <?php include_once __DIR__ . '/components/navbar.php'; ?>
 
-        <p class="sidebar-label">Menu</p>
-        <nav class="sidebar-nav">
-            <?php foreach ($menu as $page => $item): ?>
-                <a href="<?= $page ?>.php"
-                   class="sidebar-link <?= ($activePage === $page) ? 'active' : '' ?> <?= ($page === 'logout') ? 'logout-link' : '' ?>">
-                    <i class="fas <?= $item[1] ?>"></i>
-                    <?= $item[0] ?>
-                </a>
-            <?php endforeach; ?>
-        </nav>
-    </div>
-
-    <div class="user-profile">
-        <div class="user-avatar"><?= htmlspecialchars($studentInitial) ?></div>
-        <div>
-            <h4>Pelajar</h4>
-            <p>UKM Account</p>
-        </div>
-    </div>
-</aside>
-
-<main class="main-section">
-
-    <div class="page-header">
-        <div>
-            <h1>History</h1>
-            <p>View your participation record, attendance status and feedback history.</p>
-        </div>
-    </div>
-
-    <div class="search-row">
-        <div class="search-box">
-            <i class="fas fa-search"></i>
-            <input type="text" id="searchInput" placeholder="Search participation record...">
-        </div>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card stat-blue">
-            <h2><?= $totalProgram ?></h2>
-            <p>Total Events Joined</p>
-        </div>
-
-        <div class="stat-card stat-green">
-            <h2><?= $totalHadir ?></h2>
-            <p>Attendance Recorded</p>
-        </div>
-
-        <div class="stat-card stat-orange">
-            <h2><?= $attendanceRate ?>%</h2>
-            <p>Attendance Rate</p>
-        </div>
-
-        <div class="stat-card stat-purple">
-            <h2><?= $totalPoints ?></h2>
-            <p>Total Points Earned</p>
-        </div>
-    </div>
-
-    <div class="filter-section">
-        <button class="filter-btn active" onclick="filterRecords('all')">All</button>
-        <button class="filter-btn" onclick="filterRecords('Hadir')">Present</button>
-        <button class="filter-btn" onclick="filterRecords('Tidak Hadir')">Absent</button>
-        <button class="filter-btn" onclick="filterRecords('Akademik')">Academic</button>
-        <button class="filter-btn" onclick="filterRecords('Komuniti')">Community</button>
-        <button class="filter-btn" onclick="filterRecords('Kerjaya')">Career</button>
-    </div>
-
-    <div class="history-card">
-        <h2>Participation Records</h2>
-
-        <div class="record-list" id="recordsContainer">
-            <?php foreach ($records as $record): ?>
-                <?php $statusClass = $record['status'] === 'Hadir' ? 'status-present' : 'status-absent'; ?>
-
-                <div class="record-card"
-                     data-status="<?= $record['status'] ?>"
-                     data-category="<?= $record['kategori'] ?>"
-                     data-title="<?= strtolower($record['program']) ?>">
-
-                    <div class="record-header">
-                        <div>
-                            <h3 class="program-title"><?= $record['program'] ?></h3>
-                            <span class="category-tag"><?= $record['kategori'] ?></span>
-                        </div>
-
-                        <span class="status-badge <?= $statusClass ?>">
-                            <?= $record['status'] === 'Hadir' ? 'Present' : 'Absent' ?>
-                        </span>
-                    </div>
-
-                    <div class="record-meta">
-                        <div><i class="fas fa-calendar"></i><?= $record['tarikh'] ?></div>
-                        <div><i class="fas fa-location-dot"></i><?= $record['lokasi'] ?></div>
-                    </div>
-
-                    <div class="record-footer">
-                        <span class="points-pill">
-                            <i class="fas fa-coins"></i> +<?= $record['points'] ?> Points
-                        </span>
-
-                        <?php if ($record['status'] === 'Hadir'): ?>
-                            <?php if ($record['feedback']): ?>
-                                <span class="feedback-done">
-                                    <i class="fas fa-check-circle"></i> Feedback Given
-                                </span>
-                            <?php else: ?>
-                                <a href="maklum-balas.php?program_id=<?= $record['id'] ?>" class="feedback-btn">
-                                    <i class="fas fa-comment-dots"></i> Give Feedback
-                                </a>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            <span class="feedback-na">
-                                <i class="fas fa-info-circle"></i> Feedback unavailable
-                            </span>
-                        <?php endif; ?>
-                    </div>
-
+    <main class="dashboard-section">
+        <div class="container">
+            <!-- HEADER -->
+            <div class="dashboard-header-container">
+                <div class="dashboard-header-title">
+                    <h1>My Event History</h1>
+                    <p>View your participation records, attendance status, and submit feedback.</p>
                 </div>
-            <?php endforeach; ?>
+            </div>
+
+            <!-- NOTIFICATIONS -->
+            <?php if (isset($_SESSION['error'])): ?>
+                <div class="alert-banner alert-banner-error" style="margin-bottom: 24px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <i class="fas fa-circle-exclamation" style="font-size:18px; color:#ef4444;"></i>
+                        <span><?= htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></span>
+                    </div>
+                </div>
+            <?php endif; ?>
+            <?php if (isset($_SESSION['success'])): ?>
+                <div class="alert-banner alert-banner-success" style="margin-bottom: 24px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <i class="fas fa-circle-check" style="font-size:18px; color:#10b981;"></i>
+                        <span><?= htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></span>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <!-- SEARCH BAR -->
+            <div style="margin-bottom: 32px; max-width: 500px;">
+                <div style="position: relative; display: flex; align-items: center;">
+                    <i class="fas fa-search" style="position: absolute; left: 16px; color: var(--text-secondary);"></i>
+                    <input type="text" id="searchInput" placeholder="Search events by title..." style="width: 100%; padding: 12px 16px 12px 44px; border: 1px solid var(--border); border-radius: 999px; outline: none; font-size: 14px; transition: var(--transition);">
+                </div>
+            </div>
+
+
+
+            <!-- TAB FILTERS -->
+            <div class="tab-nav-wrapper" style="margin-bottom: 32px;">
+                <button class="tab-nav-btn active" onclick="filterRecords(event, 'all')">All Records</button>
+                <button class="tab-nav-btn" onclick="filterRecords(event, 'Registered')">Registered</button>
+                <button class="tab-nav-btn" onclick="filterRecords(event, 'Attended')">Attended</button>
+                <button class="tab-nav-btn" onclick="filterRecords(event, 'Absent')">Absent</button>
+                <button class="tab-nav-btn" onclick="filterRecords(event, 'Cancelled')">Cancelled</button>
+            </div>
+
+            <!-- RECORDS SECTION -->
+            <div class="dashboard-card-wrap">
+                <h2 id="upcomingHeader" style="font-size: 20px; font-weight: 800; font-family: 'Outfit'; margin-bottom: 8px;">My Registered Programmes (Upcoming & Ongoing)</h2>
+                <p id="upcomingSubheader" style="font-size: 14px; color: var(--text-secondary); margin-bottom: 24px;">These are the upcoming or ongoing programmes you are registered for.</p>
+
+                <div class="record-list" id="upcomingContainer" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 40px;">
+                    <?php if (count($upcomingRecords) > 0): ?>
+                        <?php foreach ($upcomingRecords as $record): 
+                            $badgeBg = match($record['status_display']) {
+                                'Attended' => '#10b981',
+                                'Absent' => '#ef4444',
+                                'Cancelled' => '#64748b',
+                                default => '#2563eb'
+                            };
+                        ?>
+                            <div class="record-card"
+                                 data-status="<?= $record['status_display'] ?>"
+                                 data-category="<?= $record['kategori'] ?>"
+                                 data-title="<?= strtolower($record['program']) ?>"
+                                 style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; background: var(--white); transition: var(--transition);">
+
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+                                    <div>
+                                        <h3 style="font-size: 18px; font-weight: 800; font-family: 'Outfit'; margin-bottom: 8px;"><?= htmlspecialchars($record['program']) ?></h3>
+                                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
+                                            <span style="background: var(--bg-secondary); color: var(--accent-blue); padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 700;"><?= htmlspecialchars($record['kategori']) ?></span>
+                                            <span style="background: var(--border); color: var(--text-secondary); padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 700;"><?= htmlspecialchars($record['role']) ?></span>
+                                        </div>
+                                        
+                                        <div style="display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-muted); font-size: 13px;">
+                                            <span><i class="far fa-calendar-alt" style="margin-right: 6px; color: var(--accent-blue);"></i><?= htmlspecialchars($record['tarikh']) ?></span>
+                                            <span><i class="fas fa-map-marker-alt" style="margin-right: 6px; color: var(--accent-blue);"></i><?= htmlspecialchars($record['lokasi']) ?></span>
+                                        </div>
+                                    </div>
+
+                                    <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 12px;">
+                                        <span class="event-badge" style="position: static; background-color: <?= $badgeBg ?>; font-size: 12px; font-weight: 800;"><?= htmlspecialchars($record['status_display']) ?></span>
+                                    </div>
+                                </div>
+                                <?php if ($record['status_display'] === 'Registered'): ?>
+                                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 12px;">
+                                        <a href="program-hub.php?id=<?= (int)$record['program_id'] ?>" class="btn btn-outline btn-sm" style="border-radius:999px; color: var(--accent); border-color: var(--accent);">
+                                            <i class="fas fa-comments"></i> Hub
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <div style="text-align: center; padding: 40px; border: 1px dashed var(--border); border-radius: var(--radius-md); background: var(--bg-main);">
+                            <i class="fas fa-calendar-plus" style="font-size: 32px; color: var(--text-muted); margin-bottom: 12px;"></i>
+                            <h3 style="font-size:16px; font-weight:700;">No upcoming programmes</h3>
+                            <p style="font-size:13px; color:var(--text-secondary); margin-top: 4px;">Browse campus events and sign up to get started!</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <h2 id="pastHeader" style="border-top: 1px solid var(--border); padding-top: 32px; margin-top: 32px; font-size: 20px; font-weight: 800; font-family: 'Outfit'; margin-bottom: 8px;">Participation History (Past)</h2>
+                <p id="pastSubheader" style="font-size: 14px; color: var(--text-secondary); margin-bottom: 24px;">These are the programmes that have already concluded.</p>
+
+                <div class="record-list" id="pastContainer" style="display: flex; flex-direction: column; gap: 16px;">
+                    <?php if (count($pastRecords) > 0): ?>
+                        <?php foreach ($pastRecords as $record): 
+                            $badgeBg = match($record['status_display']) {
+                                'Attended' => '#10b981',
+                                'Absent' => '#ef4444',
+                                'Cancelled' => '#64748b',
+                                default => '#2563eb'
+                            };
+                        ?>
+                            <div class="record-card"
+                                 data-status="<?= $record['status_display'] ?>"
+                                 data-category="<?= $record['kategori'] ?>"
+                                 data-title="<?= strtolower($record['program']) ?>"
+                                 style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; background: var(--white); transition: var(--transition);">
+
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+                                    <div>
+                                        <h3 style="font-size: 18px; font-weight: 800; font-family: 'Outfit'; margin-bottom: 8px;"><?= htmlspecialchars($record['program']) ?></h3>
+                                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
+                                            <span style="background: var(--bg-secondary); color: var(--accent-blue); padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 700;"><?= htmlspecialchars($record['kategori']) ?></span>
+                                            <span style="background: var(--border); color: var(--text-secondary); padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 700;"><?= htmlspecialchars($record['role']) ?></span>
+                                        </div>
+                                        
+                                        <div style="display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-muted); font-size: 13px;">
+                                            <span><i class="far fa-calendar-alt" style="margin-right: 6px; color: var(--accent-blue);"></i><?= htmlspecialchars($record['tarikh']) ?></span>
+                                            <span><i class="fas fa-map-marker-alt" style="margin-right: 6px; color: var(--accent-blue);"></i><?= htmlspecialchars($record['lokasi']) ?></span>
+                                        </div>
+                                    </div>
+
+                                    <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 12px;">
+                                        <span class="event-badge" style="position: static; background-color: <?= $badgeBg ?>; font-size: 12px; font-weight: 800;"><?= htmlspecialchars($record['status_display']) ?></span>
+                                        <?php if ($record['status_display'] === 'Attended'): ?>
+                                            <span style="font-size: 13px; font-weight: 800; color: var(--accent-blue); background: #eff6ff; padding: 6px 12px; border-radius: 999px;">
+                                                <i class="fas fa-coins" style="margin-right: 4px;"></i> +<?= $record['points'] ?> Points
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+
+                                <?php if ($record['status_display'] === 'Attended'): ?>
+                                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 12px;">
+                                        <a href="program-hub.php?id=<?= (int)$record['program_id'] ?>" class="btn btn-outline btn-sm" style="border-radius:999px; color: var(--accent); border-color: var(--accent);">
+                                            <i class="fas fa-comments"></i> Hub
+                                        </a>
+                                        <?php if ($record['feedback']): ?>
+                                            <span style="color:#10b981; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+                                                <i class="fas fa-check-circle"></i> Attendance & Feedback Completed
+                                            </span>
+                                        <?php else: ?>
+                                            <a href="maklum-balas.php?id=<?= (int)$record['program_id'] ?>" class="btn btn-outline btn-sm" style="border-radius:999px;">
+                                                <i class="fas fa-comment-dots"></i> Give Feedback
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <div style="text-align: center; padding: 40px; border: 1px dashed var(--border); border-radius: var(--radius-md); background: var(--bg-main);">
+                            <i class="fas fa-history" style="font-size: 32px; color: var(--text-muted); margin-bottom: 12px;"></i>
+                            <h3 style="font-size:16px; font-weight:700;">No history records</h3>
+                            <p style="font-size:13px; color:var(--text-secondary); margin-top: 4px;">Completed programme records will appear here.</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
-    </div>
+    </main>
 
-</main>
-</div>
+    <!-- REUSABLE FOOTER -->
+    <?php include_once __DIR__ . '/components/footer.php'; ?>
 
-<script>
-function filterRecords(filter) {
-    const records = document.querySelectorAll('.record-card');
-    const buttons = document.querySelectorAll('.filter-btn');
+    <script>
+    function filterRecords(evt, filter) {
+        const records = document.querySelectorAll('.record-card');
+        const buttons = document.querySelectorAll('.tab-nav-btn');
 
-    buttons.forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+        buttons.forEach(btn => btn.classList.remove('active'));
+        evt.currentTarget.classList.add('active');
 
-    records.forEach(record => {
-        const status = record.dataset.status;
-        const category = record.dataset.category;
+        // Toggle headers dynamically based on filter selection
+        const upcomingHeader = document.getElementById('upcomingHeader');
+        const upcomingSubheader = document.getElementById('upcomingSubheader');
+        const pastHeader = document.getElementById('pastHeader');
+        const pastSubheader = document.getElementById('pastSubheader');
+        const upcomingContainer = document.getElementById('upcomingContainer');
 
-        if (filter === 'all' || filter === status || filter === category) {
-            record.style.display = 'block';
+        if (filter === 'all') {
+            if (upcomingHeader) upcomingHeader.style.display = 'block';
+            if (upcomingSubheader) upcomingSubheader.style.display = 'block';
+            if (pastHeader) pastHeader.style.display = 'block';
+            if (pastSubheader) pastSubheader.style.display = 'block';
+            if (upcomingContainer) upcomingContainer.style.marginBottom = '40px';
         } else {
-            record.style.display = 'none';
+            if (upcomingHeader) upcomingHeader.style.display = 'none';
+            if (upcomingSubheader) upcomingSubheader.style.display = 'none';
+            if (pastHeader) pastHeader.style.display = 'none';
+            if (pastSubheader) pastSubheader.style.display = 'none';
+            if (upcomingContainer) upcomingContainer.style.marginBottom = '0';
         }
+
+        records.forEach(record => {
+            const status = record.dataset.status;
+            if (filter === 'all' || filter === status) {
+                record.style.display = 'block';
+            } else {
+                record.style.display = 'none';
+            }
+        });
+    }
+
+    document.getElementById('searchInput').addEventListener('keyup', function () {
+        const keyword = this.value.toLowerCase();
+        const records = document.querySelectorAll('.record-card');
+
+        records.forEach(record => {
+            const title = record.dataset.title;
+            if (title.includes(keyword)) {
+                record.style.display = 'block';
+            } else {
+                record.style.display = 'none';
+            }
+        });
     });
-}
-
-document.getElementById('searchInput').addEventListener('keyup', function () {
-    const keyword = this.value.toLowerCase();
-    const records = document.querySelectorAll('.record-card');
-
-    records.forEach(record => {
-        const title = record.dataset.title;
-        record.style.display = title.includes(keyword) ? 'block' : 'none';
-    });
-});
-</script>
-
+    </script>
 </body>
 </html>

@@ -17,6 +17,21 @@ if (is_file(__DIR__ . '/CategoryRepository.php')) {
 if (is_file(__DIR__ . '/RegistrationRepository.php')) {
     require_once __DIR__ . '/RegistrationRepository.php';
 }
+if (is_file(__DIR__ . '/StudentInterestRepository.php')) {
+    require_once __DIR__ . '/StudentInterestRepository.php';
+}
+if (is_file(__DIR__ . '/SavedEventRepository.php')) {
+    require_once __DIR__ . '/SavedEventRepository.php';
+}
+if (is_file(__DIR__ . '/ProgressionService.php')) {
+    require_once __DIR__ . '/ProgressionService.php';
+}
+if (is_file(__DIR__ . '/LeaderboardService.php')) {
+    require_once __DIR__ . '/LeaderboardService.php';
+}
+if (is_file(__DIR__ . '/MailerService.php')) {
+    require_once __DIR__ . '/MailerService.php';
+}
 
 function db(): SupabaseClient
 {
@@ -63,10 +78,33 @@ function registrations(): RegistrationRepository
     return $repo;
 }
 
+function interests(): StudentInterestRepository
+{
+    static $repo = null;
+    if ($repo === null) {
+        $repo = new StudentInterestRepository(db());
+    }
+    return $repo;
+}
+
+function savedEvents(): SavedEventRepository
+{
+    static $repo = null;
+    if ($repo === null) {
+        $repo = new SavedEventRepository(db());
+    }
+    return $repo;
+}
+
 function requireLogin(): void
 {
     if (empty($_SESSION['user_id'])) {
-        header('Location: login.php');
+        $redirect = $_SERVER['REQUEST_URI'] ?? '';
+        if ($redirect) {
+            header('Location: login.php?redirect=' . urlencode($redirect));
+        } else {
+            header('Location: login.php');
+        }
         exit();
     }
 }

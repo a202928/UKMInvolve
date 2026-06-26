@@ -1,12 +1,130 @@
 <?php
 session_start();
-$_SESSION['role'] = 'pelajar';
+require_once __DIR__ . '/lib/bootstrap.php';
+requireRole('pelajar');
 $activePage = 'maklum-balas';
 
-$programName = $_GET['program'] ?? 'Gotong-Royong Kampus';
-$programDate = $_GET['date'] ?? '18 Januari 2026';
-$programLocation = $_GET['location'] ?? 'Kawasan Kolej';
-$submitted = isset($_POST['submit_feedback']);
+$programId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$studentId = $_SESSION['user_id'] ?? '';
+
+$program = null;
+if (db()->isConfigured() && $programId > 0) {
+    $row = programs()->findById($programId);
+    if ($row) {
+        $program = programs()->toStudentDetail($row);
+    }
+}
+
+if (!$program) {
+    header('Location: rekod-penyertaan.php');
+    exit();
+}
+
+if (!$program['is_completed']) {
+    $_SESSION['error'] = 'You can only submit feedback after the programme has completed.';
+    header('Location: rekod-penyertaan.php');
+    exit();
+}
+
+// 1. Verify eligibility: Has student attended?
+$attended = false;
+if (db()->isConfigured() && $studentId) {
+    $attCheck = db()->select(
+        'kehadiran',
+        '?program_id=eq.' . $programId . '&pelajar_id=eq.' . rawurlencode($studentId) . '&status=eq.Hadir'
+    );
+    if ($attCheck['ok'] && count($attCheck['data']) > 0) {
+        $attended = true;
+    }
+}
+
+if (!$attended) {
+    $_SESSION['error'] = 'You can only submit feedback for programmes you have attended.';
+    header('Location: rekod-penyertaan.php');
+    exit();
+}
+
+// 2. Prevent duplicate feedback
+$alreadySubmitted = false;
+if (db()->isConfigured() && $studentId) {
+    $fbCheck = db()->select(
+        'maklum_balas',
+        '?program_id=eq.' . $programId . '&pelajar_id=eq.' . rawurlencode($studentId)
+    );
+    if ($fbCheck['ok'] && count($fbCheck['data']) > 0) {
+        $alreadySubmitted = true;
+    }
+}
+
+if ($alreadySubmitted) {
+    $_SESSION['error'] = 'You have already submitted feedback for this programme.';
+    header('Location: rekod-penyertaan.php');
+    exit();
+}
+
+$submitted = false;
+$errors = [];
+
+// 3. Retrieve student profile and check if demographic information is complete
+$profileIncomplete = false;
+$student = null;
+if (db()->isConfigured() && $studentId) {
+    $student = users()->findById($studentId);
+    if (!$student || empty($student['tahun_pengajian']) || empty($student['kursus_pengajian'])) {
+        $profileIncomplete = true;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
+    if ($profileIncomplete) {
+        $errors[] = 'Please complete your profile (Year of Study and Course of Study) before submitting feedback.';
+    } else {
+        $objektif = isset($_POST['pencapaian_objektif']) ? (int)$_POST['pencapaian_objektif'] : 0;
+        $pengurusan = isset($_POST['pengurusan_program']) ? (int)$_POST['pengurusan_program'] : 0;
+        $kepuasan = isset($_POST['kepuasan_keseluruhan']) ? (int)$_POST['kepuasan_keseluruhan'] : 0;
+        $diteruskan = trim($_POST['perlu_diteruskan'] ?? '');
+        $cadangan = trim($_POST['cadangan_penambahbaikan'] ?? '');
+        
+        if ($objektif < 1 || $objektif > 5) {
+            $errors[] = 'Penilaian objektif program (Section A) diperlukan.';
+        }
+        if ($pengurusan < 1 || $pengurusan > 5) {
+            $errors[] = 'Penilaian pengurusan program (Section B) diperlukan.';
+        }
+        if ($kepuasan < 1 || $kepuasan > 5) {
+            $errors[] = 'Penilaian kepuasan keseluruhan (Section C) diperlukan.';
+        }
+        if ($diteruskan !== 'Ya' && $diteruskan !== 'Tidak') {
+            $errors[] = 'Sila pilih sama ada program perlu diteruskan (Section D).';
+        }
+        
+        if (empty($errors)) {
+            // Serialize response as JSON inside the komen column
+            $consolidated = json_encode([
+                'objektif_tercapai' => $objektif,
+                'pengurusan_keseluruhan' => $pengurusan,
+                'kepuasan_keseluruhan' => $kepuasan,
+                'perlu_diteruskan' => $diteruskan,
+                'cadangan_penambahbaikan' => $cadangan
+            ], JSON_UNESCAPED_UNICODE);
+            
+            $fbResult = db()->insert('maklum_balas', [
+                'program_id' => $programId,
+                'pelajar_id' => $studentId,
+                'rating' => $kepuasan, // Store Section C score as rating
+                'komen' => $consolidated
+            ]);
+            
+            if ($fbResult['ok']) {
+                // Award points for feedback submission (+10 points)
+                users()->awardPoints($studentId, 'feedback', $programId);
+                $submitted = true;
+            } else {
+                $errors[] = 'Gagal menyimpan maklum balas: ' . ($fbResult['error'] ?? 'Ralat tidak diketahui.');
+            }
+        }
+    }
+}
 
 $menu = [
     'dashboard_pelajar' => ['Home', 'fa-house'],
@@ -16,377 +134,287 @@ $menu = [
     'logout' => ['Logout', 'fa-right-from-bracket']
 ];
 ?>
-
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Feedback | UKMInvolve</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{
-    --page:#f8fbff;--primary:#5b8def;--dark:#2563eb;--border:#dbeafe;
-    --muted:#6b7280;--text:#111827;--green:#10b981;--red:#ef4444;
-    --orange:#f97316;--yellow:#f59e0b;
-}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#f8fbff;color:var(--text);height:100vh;overflow:hidden}
-a{text-decoration:none;color:inherit}
-button,input,textarea{font-family:inherit}
-
-.dashboard-wrapper{height:100vh;display:grid;grid-template-columns:240px 1fr;background:var(--page);overflow:hidden}
-
-/* SIDEBAR */
-.sidebar{height:100vh;background:#fff;border-right:1px solid var(--border);padding:28px 20px;display:flex;flex-direction:column;justify-content:space-between}
-.sidebar-header{display:flex;align-items:center;gap:12px;margin-bottom:30px}
-.sidebar-logo-wrap{width:38px;height:38px;border-radius:14px;background:#eaf4ff;display:flex;align-items:center;justify-content:center}
-.sidebar-logo{width:28px;height:28px;object-fit:contain}
-.sidebar-title{font-size:19px;font-weight:800}
-.sidebar-label{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;padding-left:8px}
-.sidebar-nav{display:flex;flex-direction:column;gap:8px}
-.sidebar-link{padding:11px 12px;border-radius:14px;display:flex;gap:12px;align-items:center;color:#374151;font-weight:500;transition:.25s}
-.sidebar-link i{width:18px;text-align:center}
-.sidebar-link.active,.sidebar-link:hover{background:#eff6ff;color:#2563eb;font-weight:700}
-.logout-link{color:#f97316}
-.logout-link:hover{background:#fff7ed;color:#f97316}
-.user-profile{display:flex;align-items:center;gap:10px;background:#f8fbff;border:1px solid var(--border);border-radius:16px;padding:12px}
-.user-avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:800}
-.user-profile h4{font-size:14px}
-.user-profile p{font-size:12px;color:var(--muted)}
-
-/* MAIN */
-.main-section{height:100vh;overflow-y:auto;padding:28px;background:var(--page)}
-.main-section::-webkit-scrollbar{width:8px}
-.main-section::-webkit-scrollbar-thumb{background:#bfdbfe;border-radius:999px}
-
-.feedback-container{max-width:860px;margin:0 auto}
-.page-header{margin-bottom:22px}
-.page-header h1{font-size:30px}
-.page-header p{color:var(--muted);font-size:14px;margin-top:4px}
-
-.program-card{
-    background:linear-gradient(135deg,#7bb6ff,#5b8def);
-    color:white;
-    border-radius:26px;
-    padding:24px;
-    margin-bottom:22px;
-    box-shadow:0 18px 38px rgba(91,141,239,.20);
-}
-.program-card h3{font-size:22px;margin-bottom:12px}
-.program-meta{display:flex;gap:18px;flex-wrap:wrap;font-size:14px;color:#eef6ff}
-.program-meta i{margin-right:6px}
-
-.form-card{
-    background:white;
-    border:1px solid var(--border);
-    border-radius:26px;
-    padding:26px;
-    box-shadow:0 8px 20px rgba(37,99,235,.06);
-}
-.question-group{padding:22px 0;border-bottom:1px solid var(--border)}
-.question-group:first-child{padding-top:0}
-.question-group:last-child{border-bottom:none}
-.question-label{font-size:16px;font-weight:800;margin-bottom:14px;display:block}
-.required{color:var(--red)}
-
-.star-rating{display:flex;gap:10px;margin:12px 0}
-.star-btn{background:none;border:none;font-size:30px;color:#d1d5db;cursor:pointer;transition:.2s}
-.star-btn:hover{transform:scale(1.12)}
-.star-btn.active i{color:var(--yellow)}
-.rating-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
-
-.radio-group{display:grid;gap:10px;margin-top:12px}
-.radio-option{
-    border:1px solid var(--border);
-    border-radius:16px;
-    padding:13px 15px;
-    display:flex;
-    align-items:center;
-    gap:10px;
-    cursor:pointer;
-    transition:.25s;
-}
-.radio-option:hover,.radio-option.selected{background:#eff6ff;border-color:var(--primary);color:var(--dark);font-weight:700}
-.radio-input{width:17px;height:17px}
-
-.feedback-textarea{
-    width:100%;
-    min-height:130px;
-    resize:vertical;
-    border:1px solid var(--border);
-    border-radius:18px;
-    padding:16px;
-    font-size:14px;
-    outline:none;
-    margin-top:12px;
-}
-.feedback-textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(91,141,239,.12)}
-
-.error-message{display:none;color:var(--red);font-size:13px;margin-top:8px}
-.btn-submit{
-    width:100%;
-    border:none;
-    background:var(--primary);
-    color:white;
-    padding:15px;
-    border-radius:999px;
-    font-size:15px;
-    font-weight:800;
-    cursor:pointer;
-    margin-top:22px;
-}
-.btn-submit:hover{background:var(--dark)}
-
-.success-card{
-    background:white;
-    border:1px solid var(--border);
-    border-radius:26px;
-    padding:60px 35px;
-    text-align:center;
-    box-shadow:0 8px 20px rgba(37,99,235,.06);
-}
-.success-icon{font-size:64px;color:var(--green);margin-bottom:18px}
-.success-card h2{font-size:28px;margin-bottom:10px}
-.success-card p{color:var(--muted);line-height:1.6;margin-bottom:22px}
-.btn-back{
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    background:var(--primary);
-    color:white;
-    padding:12px 24px;
-    border-radius:999px;
-    font-weight:800;
-}
-
-@media(max-width:900px){
-    body{overflow:auto}
-    .dashboard-wrapper{grid-template-columns:1fr;height:auto}
-    .sidebar{height:auto;position:relative;border-right:none;border-bottom:1px solid var(--border)}
-    .sidebar-nav{flex-direction:row;overflow-x:auto}
-    .sidebar-link{white-space:nowrap}
-    .user-profile{display:none}
-    .main-section{height:auto;overflow:visible}
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Give Feedback | UKMInvolve</title>
+    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        .star-rating {
+            display: flex;
+            gap: 12px;
+            margin: 16px 0 8px;
+        }
+        .star-btn {
+            background: none;
+            border: none;
+            font-size: 32px;
+            color: var(--border);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .star-btn:hover {
+            transform: scale(1.15);
+        }
+        .star-btn.active i {
+            color: #fbbf24;
+        }
+        .radio-group {
+            display: grid;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .radio-option {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+            background: var(--white);
+            user-select: none;
+        }
+        .radio-option:hover {
+            border-color: var(--accent-blue);
+            background: var(--bg-secondary);
+        }
+        .radio-option.selected {
+            background: #eff6ff;
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+            font-weight: 700;
+        }
+        .radio-input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent-blue);
+        }
+        .error-message {
+            display: none;
+            color: #ef4444;
+            font-size: 13px;
+            margin-top: 8px;
+            font-weight: 600;
+        }
+    </style>
 </head>
-
 <body>
-<div class="dashboard-wrapper">
 
-<aside class="sidebar">
-    <div>
-        <div class="sidebar-header">
-            <div class="sidebar-logo-wrap">
-                <img src="UKM.png" class="sidebar-logo" alt="UKM">
+    <!-- REUSABLE NAVBAR -->
+    <?php include_once __DIR__ . '/components/navbar.php'; ?>
+
+    <main class="dashboard-section">
+        <div class="container" style="max-width: 800px;">
+            <!-- HEADER -->
+            <div class="dashboard-header-container">
+                <div class="dashboard-header-title">
+                    <h1>Programme Feedback</h1>
+                    <p>Share your experience to help improve future UKM activities.</p>
+                </div>
             </div>
-            <h3 class="sidebar-title">UKMInvolve</h3>
+
+            <!-- SUCCESS CARD -->
+            <?php if ($submitted): ?>
+                <div class="dashboard-card-wrap" style="text-align: center; padding: 60px 40px;">
+                    <div style="font-size: 64px; color: #10b981; margin-bottom: 24px;">
+                        <i class="fas fa-circle-check"></i>
+                    </div>
+                    <h2 style="font-size: 28px; font-weight: 800; font-family: 'Outfit'; margin-bottom: 12px;">Thank you for your feedback!</h2>
+                    <p style="font-size: 18px; color: #10b981; font-weight: 800; margin-bottom: 24px;">+10 Bonus Points earned.</p>
+                    <a href="rekod-penyertaan.php" class="btn btn-primary" style="border-radius: 999px;">
+                        <i class="fas fa-arrow-left" style="margin-right: 8px;"></i> Back to History
+                    </a>
+                </div>
+            <?php elseif ($profileIncomplete): ?>
+                <!-- INCOMPLETE PROFILE CARD -->
+                <div class="dashboard-card-wrap" style="text-align: center; padding: 60px 40px; border: 1px solid #fecaca; background: #fef2f2;">
+                    <div style="font-size: 64px; color: #ef4444; margin-bottom: 24px;">
+                        <i class="fas fa-circle-exclamation"></i>
+                    </div>
+                    <h2 style="font-size: 24px; font-weight: 800; font-family: 'Outfit'; margin-bottom: 12px; color: #991b1b;">Profile Incomplete</h2>
+                    <p style="font-size: 15px; color: #7f1d1d; max-width: 500px; margin: 0 auto 32px; line-height: 1.6;">Please complete your profile (Year of Study and Course of Study) before submitting feedback.</p>
+                    <a href="profile.php" class="btn btn-primary" style="border-radius: 999px;">
+                        <i class="fas fa-user-gear" style="margin-right: 8px;"></i> Edit Profile
+                    </a>
+                </div>
+            <?php else: ?>
+                <!-- PROGRAM SUMMARY -->
+                <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: var(--white); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 32px; box-shadow: var(--shadow-md);">
+                    <h3 style="font-size: 20px; font-weight: 800; font-family: 'Outfit'; margin-bottom: 12px; color: var(--white);"><?= htmlspecialchars($program['title'] ?? 'Programme') ?></h3>
+                    <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted);">
+                        <span><i class="far fa-calendar-alt" style="margin-right: 6px;"></i><?= htmlspecialchars($program['date'] ?? '') ?></span>
+                        <span><i class="fas fa-map-marker-alt" style="margin-right: 6px;"></i><?= htmlspecialchars($program['location'] ?? '') ?></span>
+                    </div>
+                </div>
+
+                <!-- ERROR LIST -->
+                <?php if (!empty($errors)): ?>
+                    <div class="alert-banner alert-banner-error" style="margin-bottom: 24px;">
+                        <ul style="list-style: none; margin: 0; padding: 0;">
+                            <?php foreach ($errors as $err): ?>
+                                <li style="display: flex; align-items: center; gap: 8px;"><i class="fas fa-circle-exclamation"></i> <?= htmlspecialchars($err) ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                <?php endif; ?>
+
+                <!-- FEEDBACK FORM -->
+                <form method="POST" class="dashboard-card-wrap" id="feedbackForm">
+                    <!-- SECTION A -->
+                    <div style="padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px;">
+                        <label style="font-size: 16px; font-weight: 800; color: var(--text-primary);">SECTION A: Adakah objektif program ini tercapai? <span style="color:#ef4444;">*</span></label>
+                        <div class="star-rating" data-input="pencapaian_objektif">
+                            <?php for($i=1; $i<=5; $i++): ?>
+                                <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
+                            <?php endfor; ?>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); font-weight: 700; margin-top: 4px;">
+                            <span>1 - Sangat Tidak Setuju</span>
+                            <span>3 - Neutral</span>
+                            <span>5 - Sangat Setuju</span>
+                        </div>
+                        <input type="hidden" name="pencapaian_objektif" id="pencapaian_objektif" value="0">
+                        <div class="error-message">Penilaian objektif program diperlukan.</div>
+                    </div>
+
+                    <!-- SECTION B -->
+                    <div style="padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px;">
+                        <label style="font-size: 16px; font-weight: 800; color: var(--text-primary);">SECTION B: Bagaimana anda menilai pengurusan program secara keseluruhan? <span style="color:#ef4444;">*</span></label>
+                        <div class="star-rating" data-input="pengurusan_program">
+                            <?php for($i=1; $i<=5; $i++): ?>
+                                <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
+                            <?php endfor; ?>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); font-weight: 700; margin-top: 4px;">
+                            <span>1 - Sangat Tidak Setuju</span>
+                            <span>3 - Neutral</span>
+                            <span>5 - Sangat Setuju</span>
+                        </div>
+                        <input type="hidden" name="pengurusan_program" id="pengurusan_program" value="0">
+                        <div class="error-message">Penilaian pengurusan program diperlukan.</div>
+                    </div>
+
+                    <!-- SECTION C -->
+                    <div style="padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px;">
+                        <label style="font-size: 16px; font-weight: 800; color: var(--text-primary);">SECTION C: Adakah anda berpuas hati dengan pengalaman keseluruhan program ini? <span style="color:#ef4444;">*</span></label>
+                        <div class="star-rating" data-input="kepuasan_keseluruhan">
+                            <?php for($i=1; $i<=5; $i++): ?>
+                                <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
+                            <?php endfor; ?>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); font-weight: 700; margin-top: 4px;">
+                            <span>1 - Sangat Tidak Setuju</span>
+                            <span>3 - Neutral</span>
+                            <span>5 - Sangat Setuju</span>
+                        </div>
+                        <input type="hidden" name="kepuasan_keseluruhan" id="kepuasan_keseluruhan" value="0">
+                        <div class="error-message">Penilaian kepuasan keseluruhan diperlukan.</div>
+                    </div>
+
+                    <!-- SECTION D -->
+                    <div style="padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px;">
+                        <label style="font-size: 16px; font-weight: 800; color: var(--text-primary);">SECTION D: Adakah program seperti ini perlu diteruskan pada masa akan datang? <span style="color:#ef4444;">*</span></label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="perlu_diteruskan" value="Ya" class="radio-input">
+                                Ya
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="perlu_diteruskan" value="Tidak" class="radio-input">
+                                Tidak
+                            </label>
+                        </div>
+                        <div class="error-message">Sila pilih sama ada program perlu diteruskan.</div>
+                    </div>
+
+                    <!-- SECTION E -->
+                    <div style="margin-bottom: 32px;">
+                        <label style="font-size: 16px; font-weight: 800; color: var(--text-primary);">SECTION E: Cadangan Penambahbaikan</label>
+                        <textarea name="cadangan_penambahbaikan" style="width: 100%; min-height: 120px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-top: 12px; outline: none; font-size: 14px; resize: vertical; transition: var(--transition);" placeholder="Berikan cadangan penambahbaikan anda..." onfocus="this.style.borderColor='var(--primary)';" onblur="this.style.borderColor='var(--border)';"></textarea>
+                    </div>
+
+                    <!-- SUBMIT BUTTON -->
+                    <button type="submit" name="submit_feedback" class="btn btn-primary" style="width: 100%; border-radius: 999px; font-weight: 800; padding: 14px;">
+                        <i class="fas fa-paper-plane" style="margin-right: 6px;"></i> Submit Feedback
+                    </button>
+                </form>
+            <?php endif; ?>
         </div>
+    </main>
 
-        <p class="sidebar-label">Menu</p>
-        <nav class="sidebar-nav">
-            <?php foreach ($menu as $page => $item): ?>
-                <a href="<?= $page ?>.php"
-                   class="sidebar-link <?= ($activePage === $page) ? 'active' : '' ?> <?= ($page === 'logout') ? 'logout-link' : '' ?>">
-                    <i class="fas <?= $item[1] ?>"></i>
-                    <?= $item[0] ?>
-                </a>
-            <?php endforeach; ?>
-        </nav>
-    </div>
+    <!-- REUSABLE FOOTER -->
+    <?php include_once __DIR__ . '/components/footer.php'; ?>
 
-    <div class="user-profile">
-        <div class="user-avatar">P</div>
-        <div>
-            <h4>Pelajar</h4>
-            <p>UKM Account</p>
-        </div>
-    </div>
-</aside>
+    <script>
+    document.querySelectorAll('.star-rating').forEach(group => {
+        const input = document.getElementById(group.dataset.input);
+        const stars = group.querySelectorAll('.star-btn');
 
-<main class="main-section">
-<div class="feedback-container">
+        stars.forEach(star => {
+            star.addEventListener('click', () => {
+                const value = parseInt(star.dataset.value);
+                input.value = value;
 
-<?php if ($submitted): ?>
+                stars.forEach(s => {
+                    s.classList.toggle('active', parseInt(s.dataset.value) <= value);
+                });
 
-    <div class="success-card">
-        <div class="success-icon">
-            <i class="fas fa-check-circle"></i>
-        </div>
-        <h2>Thank You!</h2>
-        <p>Your feedback has been submitted successfully and will help improve future programmes.</p>
-        <a href="rekod-penyertaan.php" class="btn-back">
-            <i class="fas fa-arrow-left"></i> Back to History
-        </a>
-    </div>
-
-<?php else: ?>
-
-    <div class="page-header">
-        <h1>Feedback</h1>
-        <p>Share your experience and help improve future UKMInvolve events.</p>
-    </div>
-
-    <div class="program-card">
-        <h3><?= htmlspecialchars($programName) ?></h3>
-        <div class="program-meta">
-            <span><i class="fas fa-calendar"></i><?= htmlspecialchars($programDate) ?></span>
-            <span><i class="fas fa-location-dot"></i><?= htmlspecialchars($programLocation) ?></span>
-        </div>
-    </div>
-
-    <form method="POST" class="form-card" id="feedbackForm">
-
-        <div class="question-group">
-            <label class="question-label">1. Overall rating for this programme <span class="required">*</span></label>
-            <div class="star-rating" data-input="penilaian_keseluruhan">
-                <?php for($i=1; $i<=5; $i++): ?>
-                    <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
-                <?php endfor; ?>
-            </div>
-            <div class="rating-labels">
-                <span>Very Poor</span><span>Excellent</span>
-            </div>
-            <input type="hidden" name="penilaian_keseluruhan" id="penilaian_keseluruhan" value="0">
-            <div class="error-message">Please give a rating</div>
-        </div>
-
-        <div class="question-group">
-            <label class="question-label">2. Were the programme objectives achieved? <span class="required">*</span></label>
-            <div class="radio-group">
-                <?php foreach(['Strongly Disagree','Disagree','Neutral','Agree','Strongly Agree'] as $option): ?>
-                    <label class="radio-option">
-                        <input type="radio" name="pencapaian_objektif" value="<?= $option ?>" class="radio-input">
-                        <?= $option ?>
-                    </label>
-                <?php endforeach; ?>
-            </div>
-            <div class="error-message">Please choose one option</div>
-        </div>
-
-        <div class="question-group">
-            <label class="question-label">3. How was the programme management? <span class="required">*</span></label>
-            <div class="star-rating" data-input="pengurusan_program">
-                <?php for($i=1; $i<=5; $i++): ?>
-                    <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
-                <?php endfor; ?>
-            </div>
-            <div class="rating-labels">
-                <span>Poor</span><span>Excellent</span>
-            </div>
-            <input type="hidden" name="pengurusan_program" id="pengurusan_program" value="0">
-            <div class="error-message">Please give a rating</div>
-        </div>
-
-        <div class="question-group">
-            <label class="question-label">4. Was the programme beneficial to you? <span class="required">*</span></label>
-            <div class="radio-group">
-                <?php foreach(['Not Beneficial','Less Beneficial','Neutral','Beneficial','Very Beneficial'] as $option): ?>
-                    <label class="radio-option">
-                        <input type="radio" name="kualiti_aktiviti" value="<?= $option ?>" class="radio-input">
-                        <?= $option ?>
-                    </label>
-                <?php endforeach; ?>
-            </div>
-            <div class="error-message">Please choose one option</div>
-        </div>
-
-        <div class="question-group">
-            <label class="question-label">5. Time management and programme flow <span class="required">*</span></label>
-            <div class="star-rating" data-input="pengurusan_masa">
-                <?php for($i=1; $i<=5; $i++): ?>
-                    <button type="button" class="star-btn" data-value="<?= $i ?>"><i class="fas fa-star"></i></button>
-                <?php endfor; ?>
-            </div>
-            <div class="rating-labels">
-                <span>Not Organized</span><span>Very Organized</span>
-            </div>
-            <input type="hidden" name="pengurusan_masa" id="pengurusan_masa" value="0">
-            <div class="error-message">Please give a rating</div>
-        </div>
-
-        <div class="question-group">
-            <label class="question-label">6. Comments or suggestions</label>
-            <textarea name="komen" class="feedback-textarea" placeholder="Example: The programme was useful, but the activities could be more interactive..."></textarea>
-            <p style="font-size:12px;color:var(--muted);margin-top:8px;">Optional but highly appreciated.</p>
-        </div>
-
-        <button type="submit" name="submit_feedback" class="btn-submit">
-            <i class="fas fa-paper-plane"></i> Submit Feedback
-        </button>
-
-    </form>
-
-<?php endif; ?>
-
-</div>
-</main>
-</div>
-
-<script>
-document.querySelectorAll('.star-rating').forEach(group => {
-    const input = document.getElementById(group.dataset.input);
-    const stars = group.querySelectorAll('.star-btn');
-
-    stars.forEach(star => {
-        star.addEventListener('click', () => {
-            const value = parseInt(star.dataset.value);
-            input.value = value;
-
-            stars.forEach(s => {
-                s.classList.toggle('active', parseInt(s.dataset.value) <= value);
+                group.parentElement.querySelector('.error-message').style.display = 'none';
             });
+        });
+    });
 
+    document.querySelectorAll('.radio-option').forEach(option => {
+        option.addEventListener('click', () => {
+            const group = option.parentElement;
+            group.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
+            option.classList.add('selected');
+            option.querySelector('input').checked = true;
             group.parentElement.querySelector('.error-message').style.display = 'none';
         });
     });
-});
 
-document.querySelectorAll('.radio-option').forEach(option => {
-    option.addEventListener('click', () => {
-        const group = option.parentElement;
-        group.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
-        option.classList.add('selected');
-        option.querySelector('input').checked = true;
-        group.parentElement.querySelector('.error-message').style.display = 'none';
-    });
-});
+    const form = document.getElementById('feedbackForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            let valid = true;
 
-const form = document.getElementById('feedbackForm');
-if (form) {
-    form.addEventListener('submit', function(e) {
-        let valid = true;
+            document.querySelectorAll('.question-group, form > div').forEach(group => {
+                const hidden = group.querySelector('input[type="hidden"]');
+                const radios = group.querySelectorAll('input[type="radio"]');
+                const error = group.querySelector('.error-message');
 
-        document.querySelectorAll('.question-group').forEach(group => {
-            const hidden = group.querySelector('input[type="hidden"]');
-            const radios = group.querySelectorAll('input[type="radio"]');
-            const error = group.querySelector('.error-message');
-
-            if (hidden && hidden.value === '0') {
-                error.style.display = 'block';
-                valid = false;
-            }
-
-            if (radios.length > 0) {
-                const checked = group.querySelector('input[type="radio"]:checked');
-                if (!checked) {
-                    error.style.display = 'block';
+                if (hidden && hidden.value === '0') {
+                    if (error) error.style.display = 'block';
                     valid = false;
+                }
+
+                if (radios.length > 0) {
+                    const checked = group.querySelector('input[type="radio"]:checked');
+                    if (!checked) {
+                        if (error) error.style.display = 'block';
+                        valid = false;
+                    }
+                }
+            });
+
+            if (!valid) {
+                e.preventDefault();
+                const firstErr = document.querySelector('.error-message[style*="block"]');
+                if (firstErr) {
+                    firstErr.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
                 }
             }
         });
-
-        if (!valid) {
-            e.preventDefault();
-            document.querySelector('.error-message[style*="block"]').scrollIntoView({
-                behavior: 'smooth',
-                block: 'center'
-            });
-        }
-    });
-}
-</script>
-
+    }
+    </script>
 </body>
 </html>

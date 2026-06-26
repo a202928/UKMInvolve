@@ -6,10 +6,20 @@ class CategoryRepository
     {
     }
 
-    public function listAll(): array
+    public function listAll(bool $onlyActive = false): array
     {
-        $result = $this->db->select('kategori', '?order=nama.asc');
+        $query = '?order=nama.asc';
+        if ($onlyActive) {
+            $query .= '&status=eq.aktif';
+        }
+        $result = $this->db->select('kategori', $query);
         if (!$result['ok']) {
+            if ($onlyActive) {
+                $fallbackResult = $this->db->select('kategori', '?order=nama.asc');
+                if ($fallbackResult['ok']) {
+                    return $fallbackResult['data'];
+                }
+            }
             return [];
         }
         return $result['data'];
@@ -65,6 +75,42 @@ class CategoryRepository
             'jumlahProgram' => $programCount,
             'color' => $category['color'] ?? '#5b8def',
             'icon' => $category['icon'] ?? 'fa-layer-group',
+            'status' => $category['status'] ?? 'aktif',
+            'mata' => (int)($category['mata'] ?? 100),
         ];
     }
+
+    public function createCategory(string $nama, string $color = '#5b8def', string $icon = 'fa-layer-group', int $mata = 100): array
+    {
+        $slug = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '-', $nama), '-'));
+        $payload = [
+            'nama' => trim($nama),
+            'slug' => $slug,
+            'color' => $color,
+            'icon' => $icon,
+            'mata' => $mata,
+            'status' => 'aktif'
+        ];
+        return $this->db->insert('kategori', $payload);
+    }
+
+    public function updateCategory(int $id, string $nama, string $color, string $icon, string $status, int $mata = 100): array
+    {
+        $slug = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '-', $nama), '-'));
+        $payload = [
+            'nama' => trim($nama),
+            'slug' => $slug,
+            'color' => $color,
+            'icon' => $icon,
+            'status' => $status,
+            'mata' => $mata
+        ];
+        return $this->db->update('kategori', '?id=eq.' . $id, $payload);
+    }
+
+    public function deleteCategory(int $id): array
+    {
+        return $this->db->delete('kategori', '?id=eq.' . $id);
+    }
 }
+

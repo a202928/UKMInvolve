@@ -10,21 +10,21 @@ if ($userPeranan === 'pelajar') {
         'rekod-penyertaan' => ['History', 'fa-clock-rotate-left'],
         'logout' => ['Logout', 'fa-right-from-bracket']
     ];
-} elseif ($userRole === 'penganjur') {
+} elseif ($userPeranan === 'penganjur') {
     $menu = [
         'dashboard_penganjur' => ['Dashboard', 'fa-border-all'],
-        'hebahan-program' => ['Hebahan', 'fa-bullhorn'],
-        'urus-program' => ['Urus Program', 'fa-calendar-check'],
-        'peserta-kehadiran' => ['Peserta', 'fa-users'],
-        'laporan-statistik' => ['Laporan', 'fa-chart-column']
+        'hebahan-program' => ['Program Announcements', 'fa-bullhorn'],
+        'urus-program' => ['Manage Programs', 'fa-calendar-check'],
+        'peserta-kehadiran' => ['Participants', 'fa-users'],
+        'laporan-statistik' => ['Reports', 'fa-chart-column']
     ];
 } else {
     $menu = [
         'dashboard-pentadbir' => ['Dashboard', 'fa-border-all'],
-        'pengurusan-pengguna' => ['Pengguna', 'fa-users-gear'],
-        'pengurusan-kategori' => ['Kategori', 'fa-layer-group'],
-        'urus_mata_admin' => ['Urus Mata', 'fa-sliders-h'],
-        'statistik-sistem' => ['Statistik', 'fa-chart-pie']
+        'pengurusan-pengguna' => ['Users', 'fa-users-gear'],
+        'pengurusan-kategori' => ['Category', 'fa-layer-group'],
+        'urus_mata_admin' => ['Manage Points', 'fa-sliders-h'],
+        'statistik-sistem' => ['Statistics', 'fa-chart-pie']
     ];
 }
 ?>
@@ -239,7 +239,7 @@ if ($userPeranan === 'pelajar') {
 
                 <a href="settings.php" class="sidebar-link">
                     <i class="fas fa-gear"></i>
-                    Setting
+                    Settings
                 </a>
 
                 <a href="logout.php" class="sidebar-link logout-link">
