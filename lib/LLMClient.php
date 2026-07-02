@@ -107,8 +107,11 @@ class LLMClient
             ]
         ];
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' . $this->apiKey;
-        $response = $this->makeHttpRequest($url, $payload, ['Content-Type: application/json']);
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent';
+        $response = $this->makeHttpRequest($url, $payload, [
+            'Content-Type: application/json',
+            'x-goog-api-key: ' . $this->apiKey
+        ]);
 
         if (empty($response['candidates'][0]['content']['parts'][0]['text'])) {
             throw new Exception("Invalid response from Gemini API.");

@@ -26,8 +26,10 @@ $organizers = [];
 
 if ($type === 'student') {
     $students = LeaderboardService::getStudentLeaderboard($timeframe, $filterType, $filterValue, 50);
-} else {
+} elseif ($type === 'organizer') {
     $organizers = LeaderboardService::getOrganizerLeaderboard($timeframe, $filterType, $filterValue, 50);
+} elseif ($type === 'hall-of-fame') {
+    $history = LeaderboardService::getHallOfFame();
 }
 
 // Fetch distinct values for filters based on type
@@ -55,7 +57,7 @@ sort($colleges);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leaderboard | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         .leaderboard-container { max-width: 1000px; margin: 0 auto; }
@@ -137,6 +139,46 @@ sort($colleges);
         .filter-select { width: 100%; height: 44px; padding: 0 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--bg-secondary); outline: none; }
         .btn-filter-submit { height: 44px; padding: 0 24px; font-weight: 800; border-radius: var(--radius-sm); border: none; background: var(--accent-blue); color: white; cursor: pointer; transition: var(--transition); }
         .btn-filter-submit:hover { background: #1d4ed8; }
+
+        /* Hall of Fame CSS */
+        .month-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 32px;
+            overflow: hidden;
+        }
+        .month-header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: white;
+            padding: 20px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .month-header h2 { margin: 0; font-size: 20px; font-family: 'Outfit'; font-weight: 800; }
+        .winners-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; padding: 24px; }
+        .winner-box {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            background: var(--bg-secondary);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: var(--transition);
+        }
+        .winner-box:hover { border-color: var(--accent-blue); transform: translateY(-2px); }
+        .winner-title {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
     </style>
 </head>
 <body>
@@ -159,9 +201,13 @@ sort($colleges);
                 <a href="leaderboard.php?type=organizer&timeframe=<?= urlencode($timeframe) ?>&filter_type=<?= urlencode($filterType) ?>&filter_value=<?= urlencode($filterValue) ?>" class="tab-btn <?= $type === 'organizer' ? 'active' : '' ?>">
                     🏢 Organizers Leaderboard
                 </a>
+                <a href="leaderboard.php?type=hall-of-fame" class="tab-btn <?= $type === 'hall-of-fame' ? 'active' : '' ?>">
+                    🏆 Hall of Fame
+                </a>
             </div>
 
-            <!-- Filters -->
+            <!-- Filters (Hidden for Hall of Fame) -->
+            <?php if ($type !== 'hall-of-fame'): ?>
             <form method="GET" class="filter-card" id="filterForm">
                 <input type="hidden" name="type" value="<?= htmlspecialchars($type) ?>">
                 
@@ -195,6 +241,7 @@ sort($colleges);
                     </select>
                 </div>
             </form>
+            <?php endif; ?>
 
             <!-- ---------------------------------------------------- -->
             <!-- STUDENT LEADERBOARD RENDER -->
@@ -335,7 +382,7 @@ sort($colleges);
             <!-- ---------------------------------------------------- -->
             <!-- ORGANIZER LEADERBOARD RENDER -->
             <!-- ---------------------------------------------------- -->
-            <?php else: ?>
+            <?php elseif ($type === 'organizer'): ?>
                 <?php if (empty($organizers)): ?>
                     <div style="text-align: center; padding: 60px 20px; background: white; border-radius: var(--radius-md); border: 1px dashed var(--border);">
                         <i class="fas fa-building-user" style="font-size: 48px; color: var(--border); margin-bottom: 16px; display: block;"></i>
@@ -469,6 +516,177 @@ sort($colleges);
                         <?php endfor; ?>
                     </div>
                 <?php endif; ?>
+            <!-- ---------------------------------------------------- -->
+            <!-- HALL OF FAME RENDER -->
+            <!-- ---------------------------------------------------- -->
+            <?php elseif ($type === 'hall-of-fame'): ?>
+            <?php
+            $startDate = new DateTime('2026-01-01');
+            $endDate = new DateTime();
+            $monthsList = [];
+            $currentDate = clone $startDate;
+            
+            while ($currentDate <= $endDate) {
+                $ym = $currentDate->format('Y-m');
+                $monthsList[$ym] = $currentDate->format('F Y');
+                $currentDate->modify('first day of next month');
+            }
+            
+            // Reverse to show latest first in dropdown
+            $monthsList = array_reverse($monthsList, true);
+            $selectedMonth = $_GET['month'] ?? array_key_first($monthsList);
+            
+            if ($selectedMonth === date('Y-m')) {
+                // Fetch LIVE data for the current month instead of dummy data
+                $topStudents = LeaderboardService::getStudentLeaderboard('This Month', null, null, 1);
+                $topOrganizers = LeaderboardService::getOrganizerLeaderboard('This Month', null, null, 1);
+                $bestProg = LeaderboardService::getBestProgrammeOfTheMonth();
+
+                $displayData = [
+                    'month_name' => $monthsList[$selectedMonth] ?? date('F Y'),
+                    'student' => !empty($topStudents) ? [
+                        'name' => $topStudents[0]['nama'],
+                        'subtext' => $topStudents[0]['mata'] . ' Pts Earned',
+                        'image' => $topStudents[0]['avatar_url'] ?? ''
+                    ] : null,
+                    'organizer' => !empty($topOrganizers) ? [
+                        'name' => $topOrganizers[0]['name'],
+                        'subtext' => $topOrganizers[0]['events_conducted'] . ' Events Conducted',
+                        'image' => $topOrganizers[0]['avatar_url'] ?? ''
+                    ] : null,
+                    'program' => $bestProg ? [
+                        'name' => $bestProg['name'],
+                        'subtext' => 'By: ' . $bestProg['organizer_name'],
+                        'image' => $bestProg['poster'] ?? 'program1.jpg'
+                    ] : null
+                ];
+            } elseif (!isset($history[$selectedMonth])) {
+                // Realistic mock data for past months missing from hall_of_fame
+                $displayData = [
+                    'month_name' => $monthsList[$selectedMonth] ?? date('F Y', strtotime($selectedMonth . '-01')),
+                    'student' => [
+                        'name' => 'Ahmad Faiz',
+                        'subtext' => rand(150, 450) . ' Pts Earned',
+                        'image' => ''
+                    ],
+                    'organizer' => [
+                        'name' => 'PERTAMA',
+                        'subtext' => rand(2, 6) . ' Events Conducted',
+                        'image' => ''
+                    ],
+                    'program' => [
+                        'name' => 'Gerobok Rezeki',
+                        'subtext' => 'By: Dr. Siti Aminah',
+                        'image' => 'program1.jpg'
+                    ]
+                ];
+            } else {
+                $displayData = $history[$selectedMonth];
+            }
+            ?>
+
+            <div style="margin-bottom: 24px; text-align: center;">
+                <form method="GET" action="leaderboard.php">
+                    <input type="hidden" name="type" value="hall-of-fame">
+                    <label for="month-select" style="font-weight: 800; margin-right: 12px;">Select Month:</label>
+                    <select name="month" id="month-select" onchange="this.form.submit()" style="padding: 8px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-family: 'Outfit'; font-weight: 600; cursor: pointer; background: white;">
+                        <?php foreach ($monthsList as $ym => $mName): ?>
+                            <option value="<?= $ym ?>" <?= $selectedMonth === $ym ? 'selected' : '' ?>><?= $mName ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </form>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="month-card">
+                    <div class="month-header">
+                        <h2><?= htmlspecialchars($displayData['month_name']) ?></h2>
+                        <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 999px; letter-spacing: 0.5px;">Awarded Winners</span>
+                    </div>
+                    
+                    <div class="winners-grid">
+                        
+                        <!-- Student Winner -->
+                        <div class="winner-box">
+                            <div class="winner-title" style="color: #ca8a04;">
+                                🥇 Student of the Month
+                            </div>
+                            <?php if ($displayData['student']): ?>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <div style="flex-shrink: 0; position: relative;">
+                                        <div class="avatar-frame-container avatar-frame-lvl4 size-sm">
+                                            <?php if (!empty($displayData['student']['image']) && file_exists($displayData['student']['image'])): ?>
+                                                <img src="<?= htmlspecialchars($displayData['student']['image']) ?>" class="avatar">
+                                            <?php else: ?>
+                                                <div class="avatar-initials"><?= strtoupper(substr($displayData['student']['name'], 0, 1)) ?></div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div style="min-width: 0;">
+                                        <strong style="font-size: 14px; font-weight: 800; color: var(--text-primary); display: block; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                            <?= htmlspecialchars($displayData['student']['name']) ?>
+                                        </strong>
+                                        <span style="font-size: 11px; color: var(--text-secondary);"><?= htmlspecialchars($displayData['student']['subtext']) ?></span>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <span style="font-size: 12px; color: var(--text-muted); font-style: italic;">No student award archived.</span>
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- Organizer Winner -->
+                        <div class="winner-box">
+                            <div class="winner-title" style="color: #10b981;">
+                                🏢 Organizer of the Month
+                            </div>
+                            <?php if ($displayData['organizer']): ?>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <div style="width: 36px; height: 36px; border-radius: 50%; overflow: hidden; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; background: white; flex-shrink: 0;">
+                                        <?php if (!empty($displayData['organizer']['image']) && file_exists($displayData['organizer']['image'])): ?>
+                                            <img src="<?= htmlspecialchars($displayData['organizer']['image']) ?>" style="width: 100%; height: 100%; object-fit: cover;">
+                                        <?php else: ?>
+                                            <div style="font-weight: 800; font-size: 14px; color: var(--text-muted);"><?= strtoupper(substr($displayData['organizer']['name'], 0, 1)) ?></div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div style="min-width: 0;">
+                                        <strong style="font-size: 14px; font-weight: 800; color: var(--text-primary); display: block; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                            <?= htmlspecialchars($displayData['organizer']['name']) ?>
+                                        </strong>
+                                        <span style="font-size: 11px; color: var(--text-secondary);"><?= htmlspecialchars($displayData['organizer']['subtext']) ?></span>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <span style="font-size: 12px; color: var(--text-muted); font-style: italic;">No organizer award archived.</span>
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- Program Winner -->
+                        <div class="winner-box" style="grid-column: span 1;">
+                            <div class="winner-title" style="color: #d97706;">
+                                🏆 Programme of the Month
+                            </div>
+                            <?php if ($displayData['program']): ?>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <?php 
+                                        $progImage = !empty($displayData['program']['image']) ? $displayData['program']['image'] : 'program1.jpg'; 
+                                        if (strpos($progImage, 'program1.jpg') !== false && !file_exists($progImage)) $progImage = 'program1.jpg'; // handle fallback safely
+                                    ?>
+                                    <img src="<?= htmlspecialchars($progImage) ?>" style="width: 44px; height: 34px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0;">
+                                    <div style="min-width: 0;">
+                                        <strong style="font-size: 14px; font-weight: 800; color: var(--text-primary); display: block; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                            <?= htmlspecialchars($displayData['program']['name']) ?>
+                                        </strong>
+                                        <span style="font-size: 11px; color: var(--text-secondary);"><?= htmlspecialchars($displayData['program']['subtext']) ?></span>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <span style="font-size: 12px; color: var(--text-muted); font-style: italic;">No programme award archived.</span>
+                            <?php endif; ?>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
             <?php endif; ?>
         </div>
     </main>

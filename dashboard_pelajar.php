@@ -214,6 +214,12 @@ $events = [];
 
 if (db()->isConfigured()) {
     $myInterests = interests()->getStudentInterestSlugs($studentId);
+    
+    // Fetch followed organizers
+    $followedRes = db()->select('followed_organizers', '?select=organizer_id&user_id=eq.' . $studentId);
+    if ($followedRes['ok'] && !empty($followedRes['data'])) {
+        $followedOrganizers = array_column($followedRes['data'], 'organizer_id');
+    }
 
     // Fetch active programs (hide dummy programs where penganjur_id IS NULL)
     $activeRows = array_filter(programs()->listActiveWithCategory(), fn($row) => ($row['penganjur_id'] ?? null) !== null);
@@ -474,10 +480,31 @@ $calendarEventsJson = json_encode($calendarEvents);
     <main class="dashboard-section">
         <div class="container">
             <!-- HEADER -->
-            <div class="dashboard-header-container">
+            <div class="dashboard-header-container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
                 <div class="dashboard-header-title">
                     <h1>Welcome back, <?= htmlspecialchars($studentName) ?>!</h1>
                     <p>Track your registered programmes, points, and badges.</p>
+                </div>
+                
+                <?php
+                $avatarUrl = $userData['avatar_url'] ?? '';
+                $hasAvatar = !empty($avatarUrl) && file_exists($avatarUrl);
+                ?>
+                <div class="dashboard-header-profile" style="display: flex; align-items: center; gap: 16px; background: var(--white); padding: 12px 24px; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border);">
+                    <div style="width: 56px; height: 56px; border-radius: 50%; border: 3px solid #eff6ff; overflow: hidden; flex-shrink: 0; background: var(--accent-blue); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: 800; box-shadow: var(--shadow-sm);">
+                        <?php if ($hasAvatar): ?>
+                            <img src="<?= htmlspecialchars($avatarUrl) ?>" alt="Profile" style="width: 100%; height: 100%; object-fit: cover;">
+                        <?php else: ?>
+                            <?= $studentInitial ?>
+                        <?php endif; ?>
+                    </div>
+                    <div>
+                        <div style="font-weight: 800; font-family: 'Outfit'; color: var(--text-primary); font-size: 18px; line-height: 1.2;"><?= htmlspecialchars($studentName) ?></div>
+                        <div style="font-size: 14px; color: var(--text-secondary); font-weight: 700; margin-top: 4px; display: flex; align-items: center; gap: 6px;">
+                            <span style="background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 999px; font-size: 11px; text-transform: uppercase;"><i class="fas fa-star"></i> <?= number_format($currentPoints) ?> pts</span>
+                            <span style="background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 999px; font-size: 11px; text-transform: uppercase;"><?= htmlspecialchars($levelName) ?></span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -579,18 +606,30 @@ $calendarEventsJson = json_encode($calendarEvents);
                         
                         <div style="flex: 1; max-width: 300px; min-width: 200px;">
                             <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 6px; color: #dbeafe;">
-                                <span>Progress to Top 10</span>
-                                <span><?= $personalRank['progress'] ?>%</span>
+                                <span>Level <?= $level ?> • <?= htmlspecialchars($levelName) ?></span>
+                                <span><?= $currentPoints ?> / <?= $nextLevelPoints ?> XP</span>
                             </div>
                             <div style="background: rgba(255,255,255,0.15); height: 12px; border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,0.25);">
-                                <div style="width: <?= $personalRank['progress'] ?>%; height: 100%; background: linear-gradient(90deg, #34d399 0%, #059669 100%);"></div>
+                                <div style="width: <?= $progressPercent ?>%; height: 100%; background: linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%);"></div>
                             </div>
+                            <?php if ($nextLevel && $progressPercent == 100): ?>
+                                <?php 
+                                    $missing = [];
+                                    if ($attendedEvents < ($nextLevel['req_programs'] ?? 0)) $missing[] = (($nextLevel['req_programs'] ?? 0) - $attendedEvents) . " events";
+                                    if ($completedCrew < ($nextLevel['req_crew'] ?? 0)) $missing[] = (($nextLevel['req_crew'] ?? 0) - $completedCrew) . " crew roles";
+                                    if ($streak < ($nextLevel['req_streak'] ?? 0)) $missing[] = (($nextLevel['req_streak'] ?? 0) - $streak) . "m streak";
+                                ?>
+                                <?php if (!empty($missing)): ?>
+                                    <div style="font-size: 11px; color: #fcd34d; margin-top: 6px; font-weight: 700;">
+                                        ⚠️ Attend <?= implode(', ', $missing) ?> to level up!
+                                    </div>
+                                <?php endif; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
 
-                <!-- MONTHLY LEADERBOARD WIDGETS -->
-                <?php include_once __DIR__ . '/components/leaderboard-widgets.php'; ?>
+
 
                 <div class="dashboard-main-split">
                     
@@ -804,35 +843,57 @@ $calendarEventsJson = json_encode($calendarEvents);
                     <!-- RIGHT COLUMN: POINTS, LEADERBOARD, FEED -->
                     <div style="display: flex; flex-direction: column; gap: 24px;">
                         
-                        <!-- POINT LEVEL XP CARD -->
-                        <div class="dashboard-card-wrap" style="padding: 24px; margin-bottom: 0;">
-                            <h2 style="font-size: 18px; margin-bottom: 16px;">Points Progress</h2>
-                            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 10px;">Level <?= $level ?> • <strong><?= htmlspecialchars($levelName) ?></strong></p>
-                            <div style="background: var(--bg-secondary); height: 10px; border-radius: 999px; overflow: hidden; margin-bottom: 10px;">
-                                <div style="width: <?= $progressPercent ?>%; height: 100%; background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);"></div>
-                            </div>
-                            <span style="font-size: 11px; color: var(--text-muted); font-weight: 700;"><?= $currentPoints ?> / <?= $nextLevelPoints ?> XP to next level</span>
-                        </div>
 
-                        <!-- MINI LEADERBOARD -->
+                        <!-- STUDENT LEADERBOARD WIDGET -->
                         <div class="dashboard-card-wrap" style="padding: 24px; margin-bottom: 0;">
-                            <h2 style="font-size: 18px; margin-bottom: 16px;">Top Students</h2>
-                            <div style="display:flex; flex-direction:column; gap:12px;">
-                                <?php foreach (array_slice($leaderboard, 0, 3) as $index => $u): 
-                                    $isMe = $u['id'] === $studentId;
-                                ?>
-                                    <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:8px; border-bottom:1px solid var(--border);">
-                                        <div style="display:flex; align-items:center; gap:8px;">
-                                            <span style="font-weight: 800; font-size:12px; width:20px; text-align:center; color:var(--text-secondary);"><?= $index + 1 ?></span>
-                                            <div style="flex-shrink: 0; display: inline-flex;">
-                                                <?= ProgressionService::renderAvatarHTML($u, 'sm') ?>
-                                            </div>
-                                            <span style="font-size:13px; font-weight: <?= $isMe ? '800; color:var(--accent-blue);' : '500;' ?>"><?= htmlspecialchars($u['nama'] ?? '') ?></span>
-                                        </div>
-                                        <span style="font-size:13px; font-weight:800;"><?= $u['mata'] ?? 0 ?> Pts</span>
-                                    </div>
-                                <?php endforeach; ?>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                                <h2 style="font-size: 18px; font-weight: 800; font-family:'Outfit'; margin: 0; display: flex; align-items: center; gap: 8px;">
+                                    <span style="background: rgba(37,99,235,0.1); color: var(--accent-blue); width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px;"><i class="fas fa-trophy"></i></span>
+                                    Student Leaderboard
+                                </h2>
+                                <span style="font-size: 11px; font-weight: 800; background: #eff6ff; color: #1e40af; padding: 4px 8px; border-radius: 999px; text-transform: uppercase;">This Month</span>
                             </div>
+
+                            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+                                <?php if (empty($leaderboard)): ?>
+                                    <p style="color:var(--text-secondary); font-size:13px; text-align:center; padding: 20px 0;">No active student records this month.</p>
+                                <?php else: ?>
+                                    <?php 
+                                    $studentTitles = [
+                                        1 => ['title' => 'Student of the Month', 'emoji' => '🥇', 'color' => '#ca8a04', 'bg' => '#fef9c3'],
+                                        2 => ['title' => 'Outstanding Participant', 'emoji' => '🥈', 'color' => '#475569', 'bg' => '#f1f5f9'],
+                                        3 => ['title' => 'Campus Achiever', 'emoji' => '🥉', 'color' => '#b45309', 'bg' => '#ffedd5']
+                                    ];
+                                    
+                                    foreach (array_slice($leaderboard, 0, 3) as $idx => $st): 
+                                        $rank = $idx + 1;
+                                        $tInfo = $studentTitles[$rank] ?? ['title' => 'Participant', 'emoji' => '', 'color' => 'var(--text-secondary)', 'bg' => '#f8fafc'];
+                                    ?>
+                                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--white); box-shadow: 0 1px 3px rgba(0,0,0,0.02); transition: var(--transition);" onmouseover="this.style.borderColor='var(--accent-blue)'" onmouseout="this.style.borderColor='var(--border)'">
+                                            <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                                                <span style="font-weight: 900; font-size: 14px; width: 24px; text-align: center; color: var(--text-muted);"><?= $tInfo['emoji'] ?: $rank ?></span>
+                                                <div style="flex-shrink: 0; position: relative;">
+                                                    <?= ProgressionService::renderAvatarHTML($st, 'sm') ?>
+                                                </div>
+                                                <div style="min-width: 0;">
+                                                    <h4 style="font-size: 13px; font-weight: 800; font-family:'Outfit'; margin: 0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; color: var(--text-primary);">
+                                                        <?= htmlspecialchars($st['nama'] ?? '') ?>
+                                                    </h4>
+                                                    <span style="font-size: 10px; font-weight: 800; color: <?= $tInfo['color'] ?>; background: <?= $tInfo['bg'] ?>; padding: 1px 6px; border-radius: 4px; display: inline-block; margin-top: 2px;">
+                                                        <?= $tInfo['title'] ?>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div style="text-align: right; flex-shrink: 0;">
+                                                <span style="font-weight: 900; font-size: 13px; color: var(--accent-blue); display: block;"><?= $st['mata'] ?? 0 ?> Pts</span>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </div>
+                            <a href="leaderboard.php?type=student" class="btn btn-outline" style="text-align: center; width: 100%; border-radius: 8px; font-weight: 800; text-decoration: none; padding: 8px 0; font-size: 13px;">
+                                <i class="fas fa-list-ol"></i> View Full Leaderboard
+                            </a>
                         </div>
 
                         <!-- LINKEDIN-STYLE ACTIVITY FEED -->
@@ -843,7 +904,7 @@ $calendarEventsJson = json_encode($calendarEvents);
                                 <p style="font-size: 13px; color: var(--text-secondary); text-align: center; padding: 10px 0;">No recent campus activity.</p>
                             <?php else: ?>
                                 <div style="display:flex; flex-direction:column; gap:16px;">
-                                    <?php foreach ($networkFeed as $feed): ?>
+                                    <?php foreach (array_slice($networkFeed, 0, 5) as $feed): ?>
                                         <div style="display:flex; gap:12px; align-items:flex-start; border-bottom:1px solid var(--border); padding-bottom:12px;">
                                             <?php 
                                                 $profileLink = ($feed['type'] ?? '') === 'student' ? 'public-profile.php?id='.($feed['user_id'] ?? '') : 'organizer-profile.php?id='.($feed['user_id'] ?? '');
@@ -1144,11 +1205,18 @@ $calendarEventsJson = json_encode($calendarEvents);
                                     <span>XP Points Progress</span>
                                     <span><?= $currentPoints ?> Pts Total</span>
                                 </div>
-                                <div style="background: rgba(255,255,255,0.1); height: 10px; border-radius: 999px; overflow: hidden; margin-bottom: 8px;">
+                                <div style="background: var(--bg-secondary); height: 8px; border-radius: 999px; overflow: hidden; border: 1px solid var(--border);">
                                     <div style="width: <?= $progressPercent ?>%; height: 100%; background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%);"></div>
                                 </div>
+                                <?php if ($nextLevel && $progressPercent == 100): ?>
+                                    <?php if (!empty($missing)): ?>
+                                        <div style="font-size: 11px; color: #eab308; margin-top: 6px; font-weight: 700;">
+                                            ⚠️ Required: <?= implode(', ', $missing) ?>
+                                        </div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
                                 <?php if ($progDetails['next_level']): ?>
-                                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; font-weight: 700;">
+                                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; font-weight: 700; margin-top: 8px;">
                                         <span>Current Level</span>
                                         <span><?= $nextLevelPoints - $currentPoints ?> Pts to Level <?= $level + 1 ?> (<?= htmlspecialchars($progDetails['next_level']['name']) ?>)</span>
                                     </div>

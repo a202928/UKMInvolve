@@ -176,7 +176,7 @@ $bestProgCompact = LeaderboardService::getBestProgrammeOfTheMonth();
                 </div>
             <?php endif; ?>
         </div>
-        <a href="hall-of-fame.php" class="btn btn-outline" style="text-align: center; width: 100%; border-radius: 8px; font-weight: 800; text-decoration: none; padding: 8px 0; font-size: 13px; border-color: #d97706; color: #d97706;">
+        <a href="leaderboard.php?type=hall-of-fame" class="btn btn-outline" style="text-align: center; width: 100%; border-radius: 8px; font-weight: 800; text-decoration: none; padding: 8px 0; font-size: 13px; border-color: #d97706; color: #d97706;">
             <i class="fas fa-medal"></i> View Hall of Fame
         </a>
     </div>

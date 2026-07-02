@@ -252,6 +252,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_report'])) {
         } else {
             echo "<script>window.open('feedback-report.php?program_id=" . (int)$programId . "', '_blank');</script>";
         }
+    } elseif ($reportType === 'attendance' && $format === 'pdf') {
+        if ($programId === 'all' || (int)$programId === 0) {
+            echo "<script>alert('Sila pilih program spesifik untuk menjana Laporan Kehadiran PDF.');</script>";
+        } else {
+            echo "<script>window.open('attendance-report.php?program_id=" . (int)$programId . "', '_blank');</script>";
+        }
     } else {
         echo "<script>alert('Report generated successfully in " . strtoupper($format) . " format.');</script>";
     }
@@ -273,7 +279,7 @@ $organizerInitial = strtoupper(substr($_SESSION['nama'] ?? 'O', 0, 1));
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reports & Statistics | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -357,6 +363,8 @@ $organizerInitial = strtoupper(substr($_SESSION['nama'] ?? 'O', 0, 1));
             padding-top: 35px;
             border-bottom: 2px solid var(--border);
             padding-bottom: 8px;
+            overflow-x: auto;
+            overflow-y: hidden;
         }
         .chart-item {
             display: flex;
@@ -364,6 +372,7 @@ $organizerInitial = strtoupper(substr($_SESSION['nama'] ?? 'O', 0, 1));
             align-items: center;
             flex: 1;
             max-width: 60px;
+            min-width: 48px;
         }
         .chart-bar {
             width: 100%;

@@ -98,7 +98,7 @@ $orgsCount = count(array_filter($organizers, fn($o) => $o['type'] === 'organizat
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Search Results | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css?v=5">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         .search-results-section {
@@ -259,7 +259,7 @@ $orgsCount = count(array_filter($organizers, fn($o) => $o['type'] === 'organizat
     <main class="container search-results-section">
         <!-- SEARCH BAR -->
         <div class="search-card" style="margin-top: 0; box-shadow: var(--shadow-sm); margin-bottom: 32px; padding: 20px;">
-            <form action="search.php" method="GET" style="display: flex; gap: 12px;">
+            <form action="search.php" method="GET" class="search-form" style="display: flex; gap: 12px;">
                 <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
                 <div style="position: relative; flex: 1; display: flex; align-items: center;">
                     <i class="fas fa-search" style="position: absolute; left: 16px; color: var(--text-secondary);"></i>
@@ -419,5 +419,34 @@ $orgsCount = count(array_filter($organizers, fn($o) => $o['type'] === 'organizat
     <!-- REUSABLE FOOTER -->
     <?php include_once __DIR__ . '/components/footer.php'; ?>
 
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        let timeout = null;
+        const form = document.querySelector('.search-form');
+        
+        if(form) {
+            // Auto-submit text inputs with debounce
+            document.querySelectorAll('.search-form input[type="text"]').forEach(input => {
+                input.addEventListener('input', function() {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => {
+                        form.submit();
+                    }, 600);
+                });
+            });
+            
+            // Maintain focus on search input after reload
+            const inputs = document.querySelectorAll('.search-form input[type="text"]');
+            inputs.forEach(input => {
+                if (input.value && (!document.activeElement || document.activeElement.tagName === 'BODY')) {
+                    input.focus();
+                    let val = input.value;
+                    input.value = '';
+                    input.value = val;
+                }
+            });
+        }
+    });
+    </script>
 </body>
 </html>

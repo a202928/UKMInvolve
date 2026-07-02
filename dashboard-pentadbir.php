@@ -38,7 +38,7 @@ $adminInitial = strtoupper(substr($_SESSION['nama'] ?? 'A', 0, 1));
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
@@ -246,8 +246,7 @@ $adminInitial = strtoupper(substr($_SESSION['nama'] ?? 'A', 0, 1));
                 </div>
             </div>
 
-            <!-- MONTHLY LEADERBOARD WIDGETS -->
-            <?php include_once __DIR__ . '/components/leaderboard-widgets.php'; ?>
+
 
             <!-- QUICK MANAGEMENT -->
             <div class="dashboard-card-wrap" style="margin-bottom: 0;">

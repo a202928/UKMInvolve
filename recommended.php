@@ -61,7 +61,12 @@ $historyFreq = [];
 
 if (db()->isConfigured() && $studentId) {
     $studentData = users()->findById($studentId) ?: [];
-    
+    // Fetch followed organizers
+    $followedRes = db()->select('followed_organizers', '?select=organizer_id&user_id=eq.' . $studentId);
+    if ($followedRes['ok'] && !empty($followedRes['data'])) {
+        $followedOrganizers = array_column($followedRes['data'], 'organizer_id');
+    }
+
     // Calculate history frequency
     $regs = registrations()->listByStudent($studentId);
     foreach ($regs as $reg) {
@@ -113,7 +118,7 @@ $studentInitial = strtoupper(substr($_SESSION['nama'] ?? 'P', 0, 1));
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>For You | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         .interests-grid {

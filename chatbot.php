@@ -1,5 +1,7 @@
 <!-- UKMInvolve Smart Assistant UI -->
-<link rel="stylesheet" href="chatbot.css?v=2">
+<style>
+<?php include __DIR__ . '/chatbot.css'; ?>
+</style>
 
 <div id="ukm-chatbot-widget">
     <button id="ukm-chatbot-toggle" aria-label="Open Smart Assistant">

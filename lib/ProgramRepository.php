@@ -526,22 +526,33 @@ class ProgramRepository
             }
         }
 
-        // 2. Interest Match (High Priority)
+        // 2. Interest Match (+50 mata)
         if (!empty($studentInterests) && in_array($slug, $studentInterests, true)) {
-            $score += 40;
+            $score += 50;
             $tags[] = ['text' => 'Matches Your Interest: ' . $categoryName, 'color' => '#10b981', 'icon' => 'fa-star'];
         }
 
-        // 3. Event History Match (Medium Priority)
-        if (isset($historyFreq[$slug]) && $historyFreq[$slug] >= 1) {
-            $score += 25;
+        // 3. Target Audience Match (already checked above and gives +50 or excludes)
+
+        // 4. Event History Match (max +20 mata)
+        $freq = $historyFreq[$slug] ?? 0;
+        if ($freq > 0) {
+            $historyScore = min($freq * 10, 20);
+            $score += $historyScore;
             if (count($tags) < 2) {
                 $tags[] = ['text' => 'Often Joined By You', 'color' => '#3b82f6', 'icon' => 'fa-clock-rotate-left'];
             }
         }
 
+        // 5. Followed Organizers (+10 mata)
+        if (!empty($followedOrganizers) && in_array($orgId, $followedOrganizers)) {
+            $score += 10;
+            if (count($tags) < 2) {
+                $tags[] = ['text' => 'Followed Organizer', 'color' => '#f59e0b', 'icon' => 'fa-users'];
+            }
+        }
 
-        // 5. Bonus: High Points or Upcoming
+        // 6. Bonus: High Points or Upcoming
         $points = (int)($program['mata'] ?? 0);
         if ($points >= 150) {
             $score += 10;

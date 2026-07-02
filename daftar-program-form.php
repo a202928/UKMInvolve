@@ -60,6 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $telefon = !empty($defaultTelefon) ? $defaultTelefon : '-';
     $alasan = trim($_POST['alasan'] ?? '');
     
+    $positionId = $_POST['position_id'] ?? 'peserta';
+    
     // Validations
     if (empty($nama)) {
         $errors[] = 'Full Name is missing from your profile. Please complete your profile first.';
@@ -71,11 +73,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Faculty is missing from your profile. Please complete your profile first.';
     }
     
-    // Check duplicates
+    // Check duplicates and level requirements
     if ($studentId && empty($errors)) {
-        $duplicate = registrations()->findDuplicate($studentId, $programId);
-        if ($duplicate) {
-            $errors[] = 'You are already registered for this program!';
+        if ($positionId === 'peserta') {
+            $duplicate = registrations()->findDuplicate($studentId, $programId);
+            if ($duplicate) {
+                $errors[] = 'You are already registered for this program as a participant!';
+            }
+        } else {
+            // It's a crew application
+            $crewApp = db()->select('crew_applications', '?program_id=eq.' . $programId . '&pelajar_id=eq.' . rawurlencode($studentId));
+            if ($crewApp['ok'] && count($crewApp['data']) > 0) {
+                $errors[] = 'You have already applied for a crew position in this program!';
+            }
+            
+            $prog = ProgressionService::getStudentProgression($studentId, $studentInfo);
+            if ($prog['level'] < 2) {
+                $errors[] = 'You must be Level 2 or above to apply for a Crew position.';
+            } else {
+                $posRes = db()->select('program_crew_positions', '?id=eq.' . (int)$positionId);
+                if ($posRes['ok'] && !empty($posRes['data'])) {
+                    $posName = $posRes['data'][0]['nama_jawatan'];
+                    if (ProgressionService::isMTPosition($posName) && $prog['level'] < 3) {
+                        $errors[] = 'You must be Level 3 or above to apply for MT positions.';
+                    }
+                }
+            }
         }
     }
     
@@ -104,37 +127,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!db()->isConfigured()) {
             $errors[] = 'Database is not configured.';
         } else {
-            // Check capacity dynamically
-            $activeRegs = registrations()->countActiveByProgram($programId);
-            if ($activeRegs >= $program['capacity']) {
-                $errors[] = 'This program is already full.';
-            } else {
-                $regResult = registrations()->create([
-                    'program_id' => $programId,
-                    'pelajar_id' => $studentId ?: null,
-                    'nama' => $nama,
-                    'no_matrik' => $no_matrik,
-                    'fakulti' => $fakulti,
-                    'emel' => $email,
-                    'telefon' => $telefon,
-                    'alasan' => $alasan ?: 'N/A',
-                    'status' => 'Registered',
-                    'jenis_pendaftaran' => $program['jenis_pendaftaran'] ?? 'Peserta',
-                ]);
-
+            if ($positionId !== 'peserta') {
+                $regResult = programs()->applyForCrewPosition($programId, $studentId, (int)$positionId, $alasan ?: 'N/A');
                 if ($regResult['ok']) {
-                    // Update participants count in DB
-                    $newCount = registrations()->countActiveByProgram($programId);
-                    programs()->updateParticipantCount($programId, $newCount);
-                    $program['participants'] = $newCount;
-                    
-                    // Award points for successful program registration
-                    users()->awardPoints($studentId, 'registration', $programId);
-                    
-                    header('Location: registration-success.php?id=' . $programId);
+                    $_SESSION['success_message'] = "Your crew application has been submitted successfully!";
+                    header('Location: event-details.php?id=' . $programId);
                     exit();
                 } else {
-                    $errors[] = 'Registration failed: ' . ($regResult['error'] ?? 'Database error');
+                    $errors[] = 'Crew application failed: ' . ($regResult['error'] ?? 'Database error');
+                }
+            } else {
+                // Check capacity dynamically
+                $activeRegs = registrations()->countActiveByProgram($programId);
+                if ($activeRegs >= $program['capacity']) {
+                    $errors[] = 'This program is already full.';
+                } else {
+                    $regResult = registrations()->create([
+                        'program_id' => $programId,
+                        'pelajar_id' => $studentId ?: null,
+                        'nama' => $nama,
+                        'no_matrik' => $no_matrik,
+                        'fakulti' => $fakulti,
+                        'emel' => $email,
+                        'telefon' => $telefon,
+                        'alasan' => $alasan ?: 'N/A',
+                        'status' => 'Registered',
+                        'jenis_pendaftaran' => $program['jenis_pendaftaran'] ?? 'Peserta',
+                    ]);
+
+                    if ($regResult['ok']) {
+                        // Update participants count in DB
+                        $newCount = registrations()->countActiveByProgram($programId);
+                        programs()->updateParticipantCount($programId, $newCount);
+                        $program['participants'] = $newCount;
+                        
+                        // Award points for successful program registration
+                        users()->awardPoints($studentId, 'registration', $programId);
+                        
+                        header('Location: registration-success.php?id=' . $programId);
+                        exit();
+                    } else {
+                        $errors[] = 'Registration failed: ' . ($regResult['error'] ?? 'Database error');
+                    }
                 }
             }
         }
@@ -150,7 +184,7 @@ $isFull = $seatsLeft <= 0;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register for <?= htmlspecialchars($program['title']) ?> | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
@@ -246,6 +280,43 @@ $isFull = $seatsLeft <= 0;
                         </div>
 
                         <form method="POST">
+                            <?php if (in_array($program['jenis_pendaftaran'], ['Crew/AJK', 'Peserta & Crew/AJK'])): ?>
+                                <?php 
+                                $crewPositions = programs()->getCrewPositions($programId); 
+                                $progStatus = ProgressionService::getStudentProgression($studentId, $studentInfo);
+                                ?>
+                                <?php if (!empty($crewPositions)): ?>
+                                <div class="form-group-profile" style="margin-bottom: 24px;">
+                                    <label for="position_id" style="font-weight:700; font-size:13px; color:var(--text-secondary); display:block; margin-bottom:8px;">Registration Type / Crew Position <span style="color:#ef4444;">*</span></label>
+                                    <select name="position_id" id="position_id" class="form-input-profile" required style="padding: 10px; font-size: 14px; width: 100%;">
+                                        <?php if ($program['jenis_pendaftaran'] === 'Peserta & Crew/AJK'): ?>
+                                            <option value="peserta">Participant (Peserta)</option>
+                                        <?php else: ?>
+                                            <option value="">-- Select Crew Position --</option>
+                                        <?php endif; ?>
+                                        <?php foreach ($crewPositions as $pos): ?>
+                                            <?php
+                                            $isMT = ProgressionService::isMTPosition($pos['nama_jawatan']);
+                                            $isBlockedByMT = $isMT && ($progStatus['level'] < 3);
+                                            $isBlockedByLevel = $progStatus['level'] < 2;
+                                            
+                                            $stat = programs()->getCrewPositionStats($programId)[$pos['id']] ?? null;
+                                            $remaining = $stat ? max(0, $pos['kuota'] - $stat['accepted']) : $pos['kuota'];
+                                            $isFullPos = $remaining <= 0;
+                                            
+                                            $disabled = $isBlockedByMT || $isBlockedByLevel || $isFullPos;
+                                            $reason = $isFullPos ? 'FULL' : ($isBlockedByLevel ? 'Level 2 Req' : ($isBlockedByMT ? 'Level 3 Req' : ''));
+                                            $reasonText = $reason ? " - [$reason]" : "";
+                                            ?>
+                                            <option value="<?= $pos['id'] ?>" <?= $disabled ? 'disabled' : '' ?>>
+                                                <?= htmlspecialchars($pos['nama_jawatan']) ?> (<?= $pos['mata_ganjaran'] ?> pts) - Remaining: <?= $remaining ?>/<?= $pos['kuota'] ?><?= $reasonText ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <?php endif; ?>
+                            <?php endif; ?>
+
                             <div class="form-group-profile" style="margin-bottom: 24px;">
                                 <label for="alasan" style="font-weight:700; font-size:13px; color:var(--text-secondary); display:block; margin-bottom:8px;">Additional Notes (Optional)</label>
                                 <textarea name="alasan" id="alasan" class="form-textarea-profile" placeholder="Enter any questions, dietary preferences, or additional notes here..."></textarea>
@@ -258,9 +329,18 @@ $isFull = $seatsLeft <= 0;
 
                             <div style="display:flex; justify-content:flex-end; gap:16px;">
                                 <a href="event-details.php?id=<?= $programId ?>" class="btn btn-outline" style="border-radius:999px;">Cancel</a>
-                                <button type="submit" class="btn btn-primary" style="border-radius:999px; font-weight:800;" <?= ($isFull || empty($defaultMatrik) || empty($defaultFakulti)) ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : '' ?>>
-                                    <?php if ($isFull): ?>
+                                <?php
+                                $isBlockedFromCrewOnly = false;
+                                if (isset($progStatus) && $program['jenis_pendaftaran'] === 'Crew/AJK' && $progStatus['level'] < 2) {
+                                    $isBlockedFromCrewOnly = true;
+                                }
+                                $isDisabledBtn = $isFull || empty($defaultMatrik) || empty($defaultFakulti) || $isBlockedFromCrewOnly;
+                                ?>
+                                <button type="submit" class="btn btn-primary" style="border-radius:999px; font-weight:800;" <?= $isDisabledBtn ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : '' ?>>
+                                    <?php if ($isFull && $program['jenis_pendaftaran'] !== 'Crew/AJK'): ?>
                                         Registration Full
+                                    <?php elseif ($isBlockedFromCrewOnly): ?>
+                                        Level 2 Required
                                     <?php else: ?>
                                         Register Now
                                     <?php endif; ?>

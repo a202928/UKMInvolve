@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 require_once __DIR__ . '/lib/bootstrap.php';
 
@@ -66,7 +66,28 @@ if ($dateFilter !== '') {
     });
 }
 
-// 5. Pagination calculation
+// 5. Organizer fetching (only if search query is not empty)
+$matchingOrganizers = [];
+if ($q !== '' && db()->isConfigured()) {
+    $orgRes = db()->select('users', '?peranan=eq.penganjur&status=eq.aktif');
+    if ($orgRes['ok'] && !empty($orgRes['data'])) {
+        foreach ($orgRes['data'] as $org) {
+            $orgName = $org['nama'] ?? '';
+            if (str_contains(strtolower($orgName), strtolower($q)) || str_contains(strtolower($org['organisasi'] ?? ''), strtolower($q))) {
+                $type = users()->getOrganizerType($org);
+                $matchingOrganizers[] = [
+                    'id' => $org['id'],
+                    'name' => $orgName,
+                    'bio' => $org['bio'] ?? '',
+                    'type' => $type,
+                    'avatar_url' => $org['avatar_url'] ?? ''
+                ];
+            }
+        }
+    }
+}
+
+// 6. Pagination calculation
 $limit = 6;
 $totalItems = count($filteredEvents);
 $totalPages = max(1, ceil($totalItems / $limit));
@@ -86,8 +107,24 @@ $baseQueryString = $baseQuery ? $baseQuery . '&' : '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Browse Events | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css?v=5">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        .organizer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+        .org-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between; transition: var(--transition); }
+        .org-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+        .org-card-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+        .org-card-logo-wrap { width: 60px; height: 60px; border-radius: 50%; overflow: hidden; border: 2px solid var(--border); flex-shrink: 0; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; }
+        .org-card-logo { width: 100%; height: 100%; object-fit: cover; }
+        .org-card-logo-fallback { font-size: 24px; font-weight: 800; color: var(--accent-blue); text-transform: uppercase; }
+        .org-card-title { font-size: 16px; font-weight: 800; font-family: 'Outfit'; color: var(--text-primary); line-height: 1.3; }
+        .org-card-type-badge { display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-top: 4px; }
+        .badge-faculty { background: #eff6ff; color: #2563eb; }
+        .badge-college { background: #fef3c7; color: #d97706; }
+        .badge-organization { background: #f3e8ff; color: #9333ea; }
+        .org-card-bio { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 20px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; min-height: 58px; }
+        .org-card-footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); padding-top: 16px; margin-top: auto; }
+    </style>
 </head>
 <body>
 
@@ -110,7 +147,7 @@ $baseQueryString = $baseQuery ? $baseQuery . '&' : '';
     <!-- SEARCH & FILTER BAR -->
     <section class="container" style="margin-top: 30px; margin-bottom: 50px;">
         <div class="search-card" style="margin-top: 0; box-shadow: var(--shadow-sm);">
-            <form action="search.php" method="GET" class="search-form">
+            <form action="events.php" method="GET" class="search-form">
                 <div class="search-group">
                     <label class="search-label" for="search-q">Event Name</label>
                     <div class="search-input-wrapper">
@@ -147,7 +184,7 @@ $baseQueryString = $baseQuery ? $baseQuery . '&' : '';
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <button type="submit" class="btn btn-accent btn-search" style="flex: 1;">
-                        <i class="fas fa-filter"></i> Filter
+                        <i class="fas fa-search"></i> Search
                     </button>
                     <?php if ($q !== '' || $categoryFilter !== '' || $locationFilter !== '' || $dateFilter !== ''): ?>
                         <a href="events.php" class="btn btn-outline" style="height: 50px; display: flex; align-items: center; justify-content: center; padding: 0 16px;" title="Reset Filters">
@@ -161,6 +198,56 @@ $baseQueryString = $baseQuery ? $baseQuery . '&' : '';
 
     <!-- EVENTS GRID -->
     <section class="container" style="margin-bottom: 80px;">
+        <?php if (!empty($matchingOrganizers)): ?>
+            <div style="margin-bottom: 50px;">
+                <h2 style="font-family: 'Outfit'; font-size: 24px; font-weight: 800; margin-bottom: 20px; color: var(--text-primary);">Organizers matching "<?= htmlspecialchars($q) ?>"</h2>
+                <div class="organizer-grid">
+                    <?php foreach ($matchingOrganizers as $org): 
+                        $badgeClass = match ($org['type']) {
+                            'faculty' => 'badge-faculty',
+                            'college' => 'badge-college',
+                            default => 'badge-organization'
+                        };
+                        $typeLabel = match ($org['type']) {
+                            'faculty' => 'Faculty',
+                            'college' => 'College',
+                            default => 'Organization'
+                        };
+                        $avatarPath = $org['avatar_url'];
+                        $hasAvatar = !empty($avatarPath) && file_exists($avatarPath);
+                    ?>
+                        <div class="org-card">
+                            <div>
+                                <div class="org-card-header">
+                                    <div class="org-card-logo-wrap">
+                                        <?php if ($hasAvatar): ?>
+                                            <img src="<?= htmlspecialchars($avatarPath) ?>" alt="<?= htmlspecialchars($org['name']) ?>" class="org-card-logo">
+                                        <?php else: ?>
+                                            <span class="org-card-logo-fallback"><?= strtoupper(substr($org['name'], 0, 1)) ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div>
+                                        <a href="organizer-profile.php?id=<?= $org['id'] ?>" class="org-card-title" style="text-decoration: none;"><?= htmlspecialchars($org['name']) ?></a>
+                                        <div>
+                                            <span class="org-card-type-badge <?= $badgeClass ?>"><?= $typeLabel ?></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="org-card-bio"><?= htmlspecialchars($org['bio'] ?: 'No biography or description provided yet.') ?></p>
+                            </div>
+                            <div class="org-card-footer" style="justify-content: flex-end;">
+                                <a href="organizer-profile.php?id=<?= $org['id'] ?>" class="btn btn-outline btn-sm" style="border-radius: 999px;">View Profile</a>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            
+            <?php if (!empty($paginatedEvents)): ?>
+                <h2 style="font-family: 'Outfit'; font-size: 24px; font-weight: 800; margin-bottom: 20px; color: var(--text-primary);">Events matching "<?= htmlspecialchars($q) ?>"</h2>
+            <?php endif; ?>
+        <?php endif; ?>
+
         <div class="grid-cards">
             <?php if (empty($paginatedEvents)): ?>
                 <div style="grid-column: 1/-1; text-align: center; padding: 80px 40px; border: 2px dashed var(--border); border-radius: var(--radius-md); background: var(--white);">
@@ -244,5 +331,41 @@ $baseQueryString = $baseQuery ? $baseQuery . '&' : '';
     <!-- REUSABLE FOOTER -->
     <?php include_once __DIR__ . '/components/footer.php'; ?>
 
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        let timeout = null;
+        const form = document.querySelector('.search-form');
+        
+        // Auto-submit text inputs with debounce
+        document.querySelectorAll('.search-form input[type="text"]').forEach(input => {
+            input.addEventListener('input', function() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    form.submit();
+                }, 600);
+            });
+        });
+        
+        // Auto-submit select dropdowns immediately
+        document.querySelectorAll('.search-form select').forEach(select => {
+            select.addEventListener('change', function() {
+                form.submit();
+            });
+        });
+        
+        // Maintain focus on search input after reload
+        const qInput = document.getElementById('search-q');
+        if (qInput && qInput.value) {
+            // Only focus if the user hasn't clicked somewhere else yet
+            if (!document.activeElement || document.activeElement.tagName === 'BODY') {
+                qInput.focus();
+                let val = qInput.value;
+                qInput.value = '';
+                qInput.value = val;
+            }
+        }
+    });
+    </script>
 </body>
 </html>
+

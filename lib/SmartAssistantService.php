@@ -119,7 +119,7 @@ PROMPT;
         $prompt .= "\n## RAG Database Context (Live Data for this User)\n";
 
         // 1. Page Context
-        if ($this->context['page'] === 'event-details.php' && !empty($this->context['id'])) {
+        if (isset($this->context['page']) && $this->context['page'] === 'event-details.php' && !empty($this->context['id'])) {
             $event = programs()->findById((int)$this->context['id']);
             if ($event) {
                 $prompt .= "- Currently viewing event: " . json_encode([

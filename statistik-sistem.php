@@ -226,7 +226,7 @@ $menu = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Analytics | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         /* Period Metric Blocks */
@@ -328,6 +328,9 @@ $menu = [
             gap: 12px;
             padding-top: 24px;
             border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 8px;
         }
         .chart-item {
             flex: 1;
@@ -335,6 +338,7 @@ $menu = [
             flex-direction: column;
             justify-content: flex-end;
             height: 100%;
+            min-width: 48px;
         }
         .chart-bar {
             border-radius: 6px 6px 0 0;

@@ -36,33 +36,39 @@ if ($isLoggedIn) {
                 <!-- PUBLIC VISITOR -->
                 <li><a href="index.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'index.php' ? 'active' : '' ?>">Home</a></li>
                 <li><a href="events.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'events.php' ? 'active' : '' ?>">Events</a></li>
+                <li><a href="index.php#hall-of-fame" class="navbar-link" style="font-size: 28px; line-height: 1; padding: 0 10px;" title="Hall of Fame">🏆</a></li>
                 <li><a href="index.php#categories" class="navbar-link">Categories</a></li>
                 <li><a href="index.php#about" class="navbar-link">About</a></li>
             <?php elseif ($userRole === 'pelajar'): ?>
                 <!-- STUDENT -->
                 <li><a href="dashboard_pelajar.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'dashboard_pelajar.php' ? 'active' : '' ?>">Home</a></li>
                 <li><a href="events.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'events.php' ? 'active' : '' ?>">Events</a></li>
+                <li><a href="leaderboard.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'leaderboard.php' ? 'active' : '' ?>" style="font-size: 28px; line-height: 1; padding: 0 10px;" title="Leaderboard">🏆</a></li>
                 <li><a href="rekod-penyertaan.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'rekod-penyertaan.php' ? 'active' : '' ?>">History</a></li>
-                <li><a href="leaderboard.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'leaderboard.php' ? 'active' : '' ?>">Leaderboard</a></li>
-                <li><a href="hall-of-fame.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'hall-of-fame.php' ? 'active' : '' ?>">Hall of Fame</a></li>
+                <li><a href="profile.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'profile.php' ? 'active' : '' ?>">Profile</a></li>
+
             <?php elseif ($userRole === 'penganjur'): ?>
                 <!-- ORGANIZER -->
                 <li><a href="dashboard_penganjur.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'dashboard_penganjur.php' ? 'active' : '' ?>">Dashboard</a></li>
                 <li><a href="urus-program.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'urus-program.php' ? 'active' : '' ?>">Manage Events</a></li>
+                <li><a href="leaderboard.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'leaderboard.php' ? 'active' : '' ?>" style="font-size: 28px; line-height: 1; padding: 0 10px;" title="Leaderboard">🏆</a></li>
                 <li><a href="peserta-kehadiran.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'peserta-kehadiran.php' ? 'active' : '' ?>">Participants</a></li>
-                <li><a href="leaderboard.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'leaderboard.php' ? 'active' : '' ?>">Leaderboard</a></li>
-                <li><a href="hall-of-fame.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'hall-of-fame.php' ? 'active' : '' ?>">Hall of Fame</a></li>
+                <li><a href="laporan-statistik.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'laporan-statistik.php' ? 'active' : '' ?>">Reports</a></li>
+
             <?php elseif ($userRole === 'pentadbir'): ?>
                 <!-- ADMIN -->
                 <li><a href="dashboard-pentadbir.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'dashboard-pentadbir.php' ? 'active' : '' ?>">Dashboard</a></li>
                 <li><a href="pengurusan-pengguna.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'pengurusan-pengguna.php' ? 'active' : '' ?>">Users</a></li>
-                <li><a href="leaderboard.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'leaderboard.php' ? 'active' : '' ?>">Leaderboard</a></li>
-                <li><a href="hall-of-fame.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'hall-of-fame.php' ? 'active' : '' ?>">Hall of Fame</a></li>
+                <li><a href="leaderboard.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'leaderboard.php' ? 'active' : '' ?>" style="font-size: 28px; line-height: 1; padding: 0 10px;" title="Leaderboard">🏆</a></li>
+                <li><a href="statistik-sistem.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'statistik-sistem.php' ? 'active' : '' ?>">Statistics</a></li>
                 <li><a href="urus_mata_admin.php" class="navbar-link <?= basename($_SERVER['PHP_SELF']) == 'urus_mata_admin.php' ? 'active' : '' ?>">Settings</a></li>
             <?php endif; ?>
         </ul>
 
         <div class="navbar-actions">
+            <a href="search.php" style="color: var(--text-secondary); margin-right: 16px; font-size: 18px; text-decoration: none; display: flex; align-items: center; transition: var(--transition);" title="Global Search (Organizers, Events, etc)" onmouseover="this.style.color='var(--accent-blue)'" onmouseout="this.style.color='var(--text-secondary)'">
+                <i class="fas fa-search"></i>
+            </a>
             <?php if ($isLoggedIn): ?>
                 <div class="navbar-user-dropdown" id="userDropdown">
                     <div class="navbar-dropdown-toggle" id="dropdownToggle">
@@ -90,9 +96,15 @@ if ($isLoggedIn) {
                             <a href="urus-program.php" class="navbar-dropdown-item">
                                 <i class="fas fa-calendar-days"></i> Manage Programmes
                             </a>
+                            <a href="laporan-statistik.php" class="navbar-dropdown-item">
+                                <i class="fas fa-chart-column"></i> Reports
+                            </a>
                         <?php elseif ($userRole === 'pentadbir'): ?>
                             <a href="pengurusan-pengguna.php" class="navbar-dropdown-item">
                                 <i class="fas fa-users-gear"></i> User Management
+                            </a>
+                            <a href="statistik-sistem.php" class="navbar-dropdown-item">
+                                <i class="fas fa-chart-pie"></i> Statistics
                             </a>
                         <?php endif; ?>
                         <a href="<?= $dashboardUrl ?>" class="navbar-dropdown-item">

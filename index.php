@@ -56,7 +56,7 @@ if (db()->isConfigured()) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discover Events and Activities | UKMInvolve</title>
-    <link rel="stylesheet" href="public.css?v=5">
+    <link rel="stylesheet" href="public.css?v=999">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
@@ -72,8 +72,8 @@ if (db()->isConfigured()) {
             <div class="hero-shape hero-shape-2"></div>
         </div>
         <div class="container hero-container">
-            <span class="hero-tagline">UKM Event Hub</span>
-            <h1>Discover Events and Activities at UKM</h1>
+            <span class="hero-tagline">UKMInvolve</span>
+            <h1>Discover Events at UKM</h1>
             <p>Join workshops, competitions, seminars, volunteering programmes and more. Expand your network and earn valuable activity points.</p>
             <div class="hero-actions">
                 <a href="#events" class="btn btn-primary">Explore Events</a>
@@ -87,7 +87,7 @@ if (db()->isConfigured()) {
     <!-- SECTION 2: SEARCH BAR -->
     <section class="container search-section">
         <div class="search-card">
-            <form action="search.php" method="GET" class="search-form">
+            <form action="events.php" method="GET" class="search-form">
                 <div class="search-group">
                     <label class="search-label" for="search-q">Event Name</label>
                     <div class="search-input-wrapper">
@@ -221,70 +221,21 @@ if (db()->isConfigured()) {
         </div>
     </section>
 
-    <!-- SECTION 5: UPCOMING EVENTS -->
-    <?php if (!empty($upcomingEvents)): ?>
-    <section class="container" style="padding: 80px 0;">
+    <!-- SECTION 5: HALL OF FAME -->
+    <section id="hall-of-fame" class="container" style="padding: 80px 0;">
         <div class="section-title-wrap" style="margin-bottom: 40px;">
             <div>
-                <h2>All Upcoming Events</h2>
-                <p>Browse the full list of campus events and register before spots fill up.</p>
+                <h2>Hall of Fame (This Month)</h2>
+                <p>Recognizing the top students, outstanding organizers, and the best programme of the month.</p>
             </div>
         </div>
 
-        <div class="grid-cards">
-            <?php foreach ($upcomingEvents as $event): 
-                $seatsLeft = max(0, $event['capacity'] - $event['participants']);
-                $isFull = $seatsLeft <= 0;
-                $badgeBg = $isFull ? '#ef4444' : '#10b981';
-                $badgeText = $isFull ? 'Full' : 'Open';
-            ?>
-                <div class="event-card">
-                    <div class="event-img-wrap">
-                        <span class="event-badge" style="background-color: <?= $badgeBg ?>;"><?= $badgeText ?></span>
-                        <img src="<?= htmlspecialchars(getImagePath($event['image'])) ?>" alt="<?= htmlspecialchars($event['title']) ?>" class="event-img">
-                    </div>
-                    <div class="event-card-body">
-                        <div class="event-category-organizer">
-                            <span class="event-category"><?= htmlspecialchars($event['category']) ?></span>
-                            <?php if (!empty($event['penganjur_id'])): ?>
-                                <a href="organizer-profile.php?id=<?= urlencode($event['penganjur_id']) ?>" class="event-organizer" style="color: var(--accent-blue); text-decoration: none; font-weight: 700;" title="View Organizer Profile"><?= htmlspecialchars($event['organizer']) ?></a>
-                            <?php else: ?>
-                                <span class="event-organizer" title="<?= htmlspecialchars($event['organizer']) ?>"><?= htmlspecialchars($event['organizer']) ?></span>
-                            <?php endif; ?>
-                        </div>
-                        <h3><?= htmlspecialchars($event['title']) ?></h3>
-                        
-                        <div class="event-meta-list">
-                            <div class="event-meta-item">
-                                <i class="far fa-calendar-alt"></i>
-                                <span><?= date('j M Y', strtotime($event['start_date'])) ?></span>
-                            </div>
-                            <div class="event-meta-item">
-                                <i class="far fa-clock"></i>
-                                <span><?= date('g:i A', strtotime($event['start_time'])) ?></span>
-                            </div>
-                            <div class="event-meta-item">
-                                <i class="fas fa-map-marker-alt"></i>
-                                <span><?= htmlspecialchars($event['location']) ?></span>
-                            </div>
-                        </div>
-
-                        <div class="event-card-footer">
-                            <span class="event-seats <?= $isFull ? 'full' : '' ?>">
-                                <strong><?= $seatsLeft ?></strong> seats left
-                            </span>
-                            <a href="event-details.php?id=<?= $event['id'] ?>" class="btn btn-primary btn-sm">View Details</a>
-                        </div>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        </div>
+        <?php include_once __DIR__ . '/components/hall-of-fame-widget.php'; ?>
         
         <div style="text-align: center; margin-top: 48px;">
-            <a href="events.php" class="btn btn-outline" style="min-width: 200px;">View All Programmes</a>
+            <a href="leaderboard.php?type=hall-of-fame" class="btn btn-outline" style="min-width: 200px;">View Past Winners</a>
         </div>
     </section>
-    <?php endif; ?>
 
     <!-- SECTION 9: STATISTICS SECTION -->
     <section class="stats-section">
@@ -324,5 +275,30 @@ if (db()->isConfigured()) {
     <!-- REUSABLE FOOTER -->
     <?php include_once __DIR__ . '/components/footer.php'; ?>
 
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        let timeout = null;
+        const form = document.querySelector('.search-form');
+        
+        if (form) {
+            // Auto-submit text inputs with debounce
+            document.querySelectorAll('.search-form input[type="text"]').forEach(input => {
+                input.addEventListener('input', function() {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => {
+                        form.submit();
+                    }, 600);
+                });
+            });
+            
+            // Auto-submit select dropdowns immediately
+            document.querySelectorAll('.search-form select').forEach(select => {
+                select.addEventListener('change', function() {
+                    form.submit();
+                });
+            });
+        }
+    });
+    </script>
 </body>
 </html>
